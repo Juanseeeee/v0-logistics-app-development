@@ -190,10 +190,10 @@ MIT License - Ver archivo LICENSE para más detalles
 
 ## Contacto
 
-Desarrollado por [Tu Nombre]
-- Portfolio: [tu-portfolio.com]
-- LinkedIn: [tu-linkedin]
-- Email: [tu-email]
+Desarrollado por [Juanseeeee]
+- Portfolio: [Incoming...]
+- LinkedIn: [www.linkedin.com/in/juan-segundo-isaguirre-531278239]
+- Email: [juanse.5009@gmail.com]
 
 ---
 
