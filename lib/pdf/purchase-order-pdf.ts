@@ -105,13 +105,16 @@ function drawSinglePage(
   const boxSize = 16
 
   if (logo) {
-    const maxW = 70
-    const maxH = 18
+    const leftX = marginLeft + 3
+    const rightLimitX = centerX - boxSize / 2 - 6
+    const availableW = Math.max(40, rightLimitX - leftX)
+    const maxW = availableW
+    const maxH = 35
     const ratio = logo.height / logo.width
     const fitW = Math.min(maxW, maxH / ratio)
     const fitH = fitW * ratio
     const logoY = headerTopY + 1 + boxSize / 2 - fitH / 2
-    doc.addImage(logo.data, logo.format, marginLeft + 3, logoY, fitW, fitH)
+    doc.addImage(logo.data, logo.format, leftX, logoY, fitW, fitH)
   }
   doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.5)
