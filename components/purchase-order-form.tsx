@@ -37,8 +37,10 @@ interface ExistingOrder {
   delivery_province: string
   delivery_date: string | null
   payment_terms: string
-  subtotal: number
-  iva: number
+  subtotal?: number
+  iva_amount?: number
+  iva_applied?: boolean
+  iva_percent?: number
   total: number
   status: string
   notes: string | null
@@ -76,10 +78,13 @@ export function PurchaseOrderForm({
     ]
   )
 
-  const [applyIva, setApplyIva] = useState(Boolean(existingOrder?.iva && existingOrder?.iva > 0))
+  const [applyIva, setApplyIva] = useState(Boolean(existingOrder?.iva_applied) || Boolean(existingOrder?.iva_amount && existingOrder?.iva_amount > 0))
   const [ivaRate, setIvaRate] = useState<number>(() => {
-    if (existingOrder?.subtotal && existingOrder?.iva && existingOrder.subtotal > 0) {
-      return Math.round((existingOrder.iva / existingOrder.subtotal) * 1000) / 10
+    if (existingOrder?.iva_percent) {
+      return existingOrder.iva_percent
+    }
+    if (existingOrder?.subtotal && existingOrder?.iva_amount && existingOrder.subtotal > 0) {
+      return Math.round((existingOrder.iva_amount / existingOrder.subtotal) * 1000) / 10
     }
     return 21
   })
@@ -154,7 +159,7 @@ export function PurchaseOrderForm({
           ? `${formData.notes || ""}${formData.notes ? " | " : ""}IVA:${ivaRate}%`
           : formData.notes || ""
 
-      const orderData = {
+      const orderDataPersist = {
         order_number: poNumber,
         po_number: poNumber,
         order_date: formData.issue_date,
@@ -168,19 +173,34 @@ export function PurchaseOrderForm({
         delivery_province: formData.delivery_province,
         delivery_date: formData.delivery_date || null,
         payment_terms: formData.payment_terms,
+        subtotal,
+        iva_amount: ivaAmount,
+        iva_applied: applyIva,
+        iva_percent: applyIva ? ivaRate : null,
         total,
         status: formData.status,
         notes: notesWithIva || null,
       }
 
+      const orderDataFallback = {
+        ...orderDataPersist,
+        subtotal: undefined,
+        iva_amount: undefined,
+        iva_applied: undefined,
+        iva_percent: undefined,
+      }
+
       if (existingOrder) {
         // Update existing order
-        const { error: orderError } = await supabase
+        let { error: orderError } = await supabase
           .from("purchase_orders")
-          .update(orderData)
+          .update(orderDataPersist)
           .eq("id", existingOrder.id)
 
-        if (orderError) throw orderError
+        if (orderError) {
+          const { error: retryError } = await supabase.from("purchase_orders").update(orderDataFallback).eq("id", existingOrder.id)
+          if (retryError) throw retryError
+        }
 
         // Delete old items
         await supabase.from("purchase_order_items").delete().eq("purchase_order_id", existingOrder.id)
@@ -200,13 +220,21 @@ export function PurchaseOrderForm({
         if (itemsError) throw itemsError
       } else {
         // Create new order
-        const { data: newOrder, error: orderError } = await supabase
+        let { data: newOrder, error: orderError } = await supabase
           .from("purchase_orders")
-          .insert(orderData)
+          .insert(orderDataPersist)
           .select()
           .single()
 
-        if (orderError) throw orderError
+        if (orderError) {
+          const { data: newOrder2, error: retryError } = await supabase
+            .from("purchase_orders")
+            .insert(orderDataFallback)
+            .select()
+            .single()
+          if (retryError) throw retryError
+          newOrder = newOrder2
+        }
 
         // Insert items
         const itemsData = items.map((item, index) => ({

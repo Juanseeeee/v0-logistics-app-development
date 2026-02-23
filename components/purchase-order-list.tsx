@@ -40,8 +40,10 @@ interface PurchaseOrder {
   delivery_province: string
   delivery_date: string | null
   payment_terms: string
-  subtotal: number
-  iva: number
+  subtotal?: number
+  iva_amount?: number
+  iva_applied?: boolean
+  iva_percent?: number
   total: number
   status: string
   notes: string | null
