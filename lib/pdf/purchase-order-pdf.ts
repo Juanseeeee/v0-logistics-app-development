@@ -102,14 +102,15 @@ function drawSinglePage(
   const headerTopY = 12
 
   const centerX = pageW / 2
+  const headerX = centerX + 35
   const boxSize = 16
 
   if (logo) {
     const leftX = marginLeft + 3
-    const rightLimitX = centerX - boxSize / 2 - 6
+    const rightLimitX = headerX - boxSize / 2 - 6
     const availableW = Math.max(40, rightLimitX - leftX)
     const maxW = availableW
-    const maxH = 35
+    const maxH = 45
     const ratio = logo.height / logo.width
     const fitW = Math.min(maxW, maxH / ratio)
     const fitH = fitW * ratio
@@ -118,14 +119,14 @@ function drawSinglePage(
   }
   doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.5)
-  doc.rect(centerX - boxSize / 2, headerTopY + 1, boxSize, boxSize)
+  doc.rect(headerX - boxSize / 2, headerTopY + 1, boxSize, boxSize)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(22)
   doc.setTextColor(0, 0, 0)
-  doc.text("R", centerX, headerTopY + 12.5, { align: "center" })
+  doc.text("R", headerX, headerTopY + 12.5, { align: "center" })
 
   // --- RIGHT side of header ---
-  const rightBlockX = centerX + boxSize / 2 + 6
+  const rightBlockX = headerX + boxSize / 2 + 6
   doc.setFontSize(7)
   doc.setFont("helvetica", "normal")
   doc.setTextColor(0, 0, 0)
@@ -141,15 +142,15 @@ function drawSinglePage(
 
   // "Comprobante no valido como Factura" debajo del recuadro
   doc.setFontSize(6)
-  doc.text("Comprobante no v\u00e1lido", centerX, headerTopY + boxSize + 6, { align: "center" })
-  doc.text("como Factura", centerX, headerTopY + boxSize + 9, { align: "center" })
+  doc.text("Comprobante no v\u00e1lido", headerX, headerTopY + boxSize + 6, { align: "center" })
+  doc.text("como Factura", headerX, headerTopY + boxSize + 9, { align: "center" })
 
   // Copia (ORIGINAL / DUPLICADO) centrado bajo el recuadro
   doc.setFontSize(7)
   doc.setFont("helvetica", "bold")
-  doc.text(copyLabel, centerX, headerTopY + boxSize + 12, { align: "center" })
+  doc.text(copyLabel, headerX, headerTopY + boxSize + 12, { align: "center" })
   // Línea divisoria vertical al medio, a la derecha de los datos de Grupo Pintar, comenzando bajo "Original"
-  const dividerX = centerX + 12
+  const dividerX = headerX + 12
   const lineStartY = headerTopY + boxSize + 14
   doc.setLineWidth(0.3)
   doc.line(dividerX, lineStartY + 2, dividerX, lineStartY + 30)
