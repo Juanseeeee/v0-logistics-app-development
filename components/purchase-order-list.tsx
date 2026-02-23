@@ -40,6 +40,10 @@ interface PurchaseOrder {
   delivery_province: string
   delivery_date: string | null
   payment_terms: string
+  subtotal?: number
+  iva_amount?: number
+  iva_applied?: boolean
+  iva_percent?: number
   total: number
   status: string
   notes: string | null
@@ -116,6 +120,11 @@ export function PurchaseOrderList({
   }
 
   const handleDownloadPDF = async (order: PurchaseOrder) => {
+    const subtotalCalc = order.purchase_order_items.reduce((s, it) => s + it.total_item, 0)
+    const ivaRateMatch = (order.notes || "").match(/IVA[:\s]*([0-9]+(?:\.[0-9]+)?)%/i)
+    const rate = ivaRateMatch ? Number(ivaRateMatch[1]) : (order.iva ?? 0) > 0 ? Math.round(((order.iva ?? 0) / (order.subtotal ?? subtotalCalc)) * 1000) / 10 : 0
+    const ivaAmountCalc = rate > 0 ? parseFloat(((subtotalCalc * rate) / 100).toFixed(2)) : (order.iva ?? 0)
+    const totalCalc = parseFloat((subtotalCalc + (ivaAmountCalc || 0)).toFixed(2))
     const pdfData = {
       order_number: order.po_number,
       date: order.issue_date,
@@ -128,9 +137,9 @@ export function PurchaseOrderList({
       supplier_email: "",
       supplier_iva_condition: "IVA RESPONSABLE INSCRIPTO",
       supplier_number: "",
-      subtotal: order.total,
-      iva_amount: 0,
-      total: order.total,
+      subtotal: subtotalCalc,
+      iva_amount: ivaAmountCalc || 0,
+      total: totalCalc,
       currency: "USD",
       notes: order.notes || "",
       status: order.status,

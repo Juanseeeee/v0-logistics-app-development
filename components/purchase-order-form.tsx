@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface Supplier {
   id: string
@@ -36,8 +37,10 @@ interface ExistingOrder {
   delivery_province: string
   delivery_date: string | null
   payment_terms: string
-  subtotal: number
-  iva: number
+  subtotal?: number
+  iva_amount?: number
+  iva_applied?: boolean
+  iva_percent?: number
   total: number
   status: string
   notes: string | null
@@ -75,8 +78,20 @@ export function PurchaseOrderForm({
     ]
   )
 
-  // Calculate total
-  const total = items.reduce((sum, item) => sum + item.total_item, 0)
+  const [applyIva, setApplyIva] = useState(Boolean(existingOrder?.iva_applied) || Boolean(existingOrder?.iva_amount && existingOrder?.iva_amount > 0))
+  const [ivaRate, setIvaRate] = useState<number>(() => {
+    if (existingOrder?.iva_percent) {
+      return existingOrder.iva_percent
+    }
+    if (existingOrder?.subtotal && existingOrder?.iva_amount && existingOrder.subtotal > 0) {
+      return Math.round((existingOrder.iva_amount / existingOrder.subtotal) * 1000) / 10
+    }
+    return 21
+  })
+
+  const subtotal = items.reduce((sum, item) => sum + item.total_item, 0)
+  const ivaAmount = applyIva ? parseFloat(((subtotal * ivaRate) / 100).toFixed(2)) : 0
+  const total = parseFloat((subtotal + ivaAmount).toFixed(2))
 
   const handleAddItem = () => {
     setItems([...items, { code: "", description: "", quantity: 1, unit_price: 0, total_item: 0 }])
@@ -139,7 +154,12 @@ export function PurchaseOrderForm({
         poNumber = `OCPR${String(Date.now()).slice(-8)}_${String((count || 0) + 1).padStart(6, "0")}`
       }
 
-      const orderData = {
+      const notesWithIva =
+        applyIva
+          ? `${formData.notes || ""}${formData.notes ? " | " : ""}IVA:${ivaRate}%`
+          : formData.notes || ""
+
+      const orderDataPersist = {
         order_number: poNumber,
         po_number: poNumber,
         order_date: formData.issue_date,
@@ -153,19 +173,34 @@ export function PurchaseOrderForm({
         delivery_province: formData.delivery_province,
         delivery_date: formData.delivery_date || null,
         payment_terms: formData.payment_terms,
+        subtotal,
+        iva_amount: ivaAmount,
+        iva_applied: applyIva,
+        iva_percent: applyIva ? ivaRate : null,
         total,
         status: formData.status,
-        notes: formData.notes || null,
+        notes: notesWithIva || null,
+      }
+
+      const orderDataFallback = {
+        ...orderDataPersist,
+        subtotal: undefined,
+        iva_amount: undefined,
+        iva_applied: undefined,
+        iva_percent: undefined,
       }
 
       if (existingOrder) {
         // Update existing order
-        const { error: orderError } = await supabase
+        let { error: orderError } = await supabase
           .from("purchase_orders")
-          .update(orderData)
+          .update(orderDataPersist)
           .eq("id", existingOrder.id)
 
-        if (orderError) throw orderError
+        if (orderError) {
+          const { error: retryError } = await supabase.from("purchase_orders").update(orderDataFallback).eq("id", existingOrder.id)
+          if (retryError) throw retryError
+        }
 
         // Delete old items
         await supabase.from("purchase_order_items").delete().eq("purchase_order_id", existingOrder.id)
@@ -185,13 +220,21 @@ export function PurchaseOrderForm({
         if (itemsError) throw itemsError
       } else {
         // Create new order
-        const { data: newOrder, error: orderError } = await supabase
+        let { data: newOrder, error: orderError } = await supabase
           .from("purchase_orders")
-          .insert(orderData)
+          .insert(orderDataPersist)
           .select()
           .single()
 
-        if (orderError) throw orderError
+        if (orderError) {
+          const { data: newOrder2, error: retryError } = await supabase
+            .from("purchase_orders")
+            .insert(orderDataFallback)
+            .select()
+            .single()
+          if (retryError) throw retryError
+          newOrder = newOrder2
+        }
 
         // Insert items
         const itemsData = items.map((item, index) => ({
@@ -381,11 +424,43 @@ export function PurchaseOrderForm({
       </div>
 
       {/* Total */}
-      <div className="border-t pt-4">
+      <div className="border-t pt-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={applyIva}
+            onCheckedChange={(v) => setApplyIva(Boolean(v))}
+            id="apply_iva"
+          />
+          <Label htmlFor="apply_iva">Aplicar IVA</Label>
+          {applyIva && (
+            <div className="flex items-center gap-2">
+              <Label>Porcentaje</Label>
+              <Select value={String(ivaRate)} onValueChange={(v) => setIvaRate(Number(v))}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="27">27%</SelectItem>
+                  <SelectItem value="21">21%</SelectItem>
+                  <SelectItem value="10.5">10.5%</SelectItem>
+                  <SelectItem value="5">5%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
         <div className="flex justify-end">
-          <div className="w-64">
+          <div className="w-64 space-y-1">
+            <div className="flex justify-between text-sm">
+              <span>Subtotal</span>
+              <span>${subtotal.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>IVA {applyIva ? `${ivaRate}%` : "0%"}</span>
+              <span>${ivaAmount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
             <div className="flex justify-between text-xl font-bold">
-              <span>Total O.C.:</span>
+              <span>Total O.C.</span>
               <span>${total.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
