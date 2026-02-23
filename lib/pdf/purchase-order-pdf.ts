@@ -355,6 +355,11 @@ function drawSinglePage(
   doc.text(obsLines, obsX, obsLabelY)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(6.5)
+  const ivaPercent = order.subtotal > 0 && order.iva_amount > 0 ? Math.round((order.iva_amount / order.subtotal) * 1000) / 10 : 0
+  doc.text("Subtotal", marginRight - 50, bottomRowY - 0.5)
+  doc.text(formatNumber(order.subtotal, 3), marginRight - 3, bottomRowY - 0.5, { align: "right" })
+  doc.text(`IVA ${ivaPercent}%`, marginRight - 50, bottomRowY + 2)
+  doc.text(formatNumber(order.iva_amount, 3), marginRight - 3, bottomRowY + 2, { align: "right" })
   doc.text("Total O.C.", marginRight - 50, bottomRowY + 3.5)
   doc.text(formatNumber(order.total, 3), marginRight - 3, bottomRowY + 3.5, { align: "right" })
 

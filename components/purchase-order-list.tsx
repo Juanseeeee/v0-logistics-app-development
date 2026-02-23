@@ -40,6 +40,8 @@ interface PurchaseOrder {
   delivery_province: string
   delivery_date: string | null
   payment_terms: string
+  subtotal: number
+  iva: number
   total: number
   status: string
   notes: string | null
@@ -128,8 +130,8 @@ export function PurchaseOrderList({
       supplier_email: "",
       supplier_iva_condition: "IVA RESPONSABLE INSCRIPTO",
       supplier_number: "",
-      subtotal: order.total,
-      iva_amount: 0,
+      subtotal: order.subtotal ?? order.total,
+      iva_amount: order.iva ?? 0,
       total: order.total,
       currency: "USD",
       notes: order.notes || "",

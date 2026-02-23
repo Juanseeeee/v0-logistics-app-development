@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface Supplier {
   id: string
@@ -75,8 +76,17 @@ export function PurchaseOrderForm({
     ]
   )
 
-  // Calculate total
-  const total = items.reduce((sum, item) => sum + item.total_item, 0)
+  const [applyIva, setApplyIva] = useState(Boolean(existingOrder?.iva && existingOrder?.iva > 0))
+  const [ivaRate, setIvaRate] = useState<number>(() => {
+    if (existingOrder?.subtotal && existingOrder?.iva && existingOrder.subtotal > 0) {
+      return Math.round((existingOrder.iva / existingOrder.subtotal) * 1000) / 10
+    }
+    return 21
+  })
+
+  const subtotal = items.reduce((sum, item) => sum + item.total_item, 0)
+  const ivaAmount = applyIva ? parseFloat(((subtotal * ivaRate) / 100).toFixed(2)) : 0
+  const total = parseFloat((subtotal + ivaAmount).toFixed(2))
 
   const handleAddItem = () => {
     setItems([...items, { code: "", description: "", quantity: 1, unit_price: 0, total_item: 0 }])
@@ -153,6 +163,8 @@ export function PurchaseOrderForm({
         delivery_province: formData.delivery_province,
         delivery_date: formData.delivery_date || null,
         payment_terms: formData.payment_terms,
+        subtotal,
+        iva: ivaAmount,
         total,
         status: formData.status,
         notes: formData.notes || null,
@@ -381,11 +393,43 @@ export function PurchaseOrderForm({
       </div>
 
       {/* Total */}
-      <div className="border-t pt-4">
+      <div className="border-t pt-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={applyIva}
+            onCheckedChange={(v) => setApplyIva(Boolean(v))}
+            id="apply_iva"
+          />
+          <Label htmlFor="apply_iva">Aplicar IVA</Label>
+          {applyIva && (
+            <div className="flex items-center gap-2">
+              <Label>Porcentaje</Label>
+              <Select value={String(ivaRate)} onValueChange={(v) => setIvaRate(Number(v))}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="27">27%</SelectItem>
+                  <SelectItem value="21">21%</SelectItem>
+                  <SelectItem value="10.5">10.5%</SelectItem>
+                  <SelectItem value="5">5%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
         <div className="flex justify-end">
-          <div className="w-64">
+          <div className="w-64 space-y-1">
+            <div className="flex justify-between text-sm">
+              <span>Subtotal</span>
+              <span>${subtotal.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>IVA {applyIva ? `${ivaRate}%` : "0%"}</span>
+              <span>${ivaAmount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
             <div className="flex justify-between text-xl font-bold">
-              <span>Total O.C.:</span>
+              <span>Total O.C.</span>
               <span>${total.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
