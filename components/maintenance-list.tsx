@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { LinkPurchaseOrderDialog } from "@/components/maintenance/link-purchase-order-dialog"
 
 interface Maintenance {
   id: string
@@ -94,14 +95,17 @@ export function MaintenanceList({ maintenances }: { maintenances: Maintenance[] 
               )}
             </div>
 
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDelete(maintenance.id)}
-              disabled={deleting === maintenance.id}
-            >
-              {deleting === maintenance.id ? "Eliminando..." : "Eliminar"}
-            </Button>
+            <div className="flex gap-2">
+              <LinkPurchaseOrderDialog maintenanceId={maintenance.id} />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDelete(maintenance.id)}
+                disabled={deleting === maintenance.id}
+              >
+                {deleting === maintenance.id ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}

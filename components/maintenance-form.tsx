@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PurchaseOrderSelector, SelectedPOData } from "@/components/maintenance/purchase-order-selector"
+import { TrashIcon } from "lucide-react"
 
 interface Driver {
   id: string
@@ -71,6 +73,10 @@ export function MaintenanceForm({
   })
   const [useOwnSpareParts, setUseOwnSpareParts] = useState(false)
   const [selectedSpareParts, setSelectedSpareParts] = useState<SelectedSparePart[]>([])
+  
+  // Purchase Order Linking
+  const [showPOSelector, setShowPOSelector] = useState(false)
+  const [selectedPOs, setSelectedPOs] = useState<SelectedPOData[]>([])
 
   const handleVehicleChange = (vehicleId: string) => {
     setSelectedVehicleId(vehicleId)
@@ -111,6 +117,59 @@ export function MaintenanceForm({
       ),
     )
   }
+
+  const handlePOSelect = (data: SelectedPOData) => {
+    setSelectedPOs([...selectedPOs, data])
+    setShowPOSelector(false)
+  }
+
+  const handlePORemove = (poId: string) => {
+    setSelectedPOs(selectedPOs.filter(p => p.po.id !== poId))
+  }
+
+  // Auto-calculate cost and description from selected POs
+  useEffect(() => {
+    if (selectedPOs.length === 0) return
+
+    let totalCost = 0
+    const descriptionItems: string[] = []
+
+    selectedPOs.forEach((poData) => {
+      const { po, selectedItems, allocatedAmount } = poData
+      
+      const itemIds = Object.keys(selectedItems)
+      
+      if (itemIds.length > 0 && po.items) {
+        // Calculate from specific items
+        let poSubtotal = 0
+        itemIds.forEach((itemId) => {
+          const item = po.items?.find((i) => i.id === itemId)
+          if (item) {
+            const quantity = selectedItems[itemId]
+            poSubtotal += (item.unit_price || 0) * quantity
+            descriptionItems.push(`${item.description}`)
+          }
+        })
+
+        // Apply IVA if applicable
+        if (po.iva_applied && po.iva_percent) {
+          totalCost += poSubtotal * (1 + po.iva_percent / 100)
+        } else {
+          totalCost += poSubtotal
+        }
+      } else {
+        // Fallback to allocated amount
+        totalCost += Number(allocatedAmount) || 0
+        descriptionItems.push(`OC #${po.order_number}`)
+      }
+    })
+
+    setFormData((prev) => ({
+      ...prev,
+      cost: totalCost > 0 ? totalCost.toFixed(2) : prev.cost,
+      description: descriptionItems.length > 0 ? descriptionItems.join(", ") : prev.description,
+    }))
+  }, [selectedPOs])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -163,6 +222,53 @@ export function MaintenanceForm({
         }
       }
 
+      // Handle Linked Purchase Orders
+      if (selectedPOs.length > 0 && maintenance) {
+        for (const poData of selectedPOs) {
+          let amountToLink = poData.allocatedAmount
+          const itemIds = Object.keys(poData.selectedItems)
+          
+          if (itemIds.length > 0 && poData.po.items) {
+             let subtotal = 0
+             itemIds.forEach(id => {
+                 const item = poData.po.items?.find(i => i.id === id)
+                 if (item) subtotal += (item.unit_price || 0) * poData.selectedItems[id]
+             })
+             
+             if (poData.po.iva_applied && poData.po.iva_percent) {
+                 amountToLink = subtotal * (1 + poData.po.iva_percent / 100)
+             } else {
+                 amountToLink = subtotal
+             }
+          }
+
+          // 1. Link Header
+          const { error: headerError } = await supabase
+            .from("maintenance_purchase_orders")
+            .insert({
+              maintenance_id: maintenance.id,
+              purchase_order_id: poData.po.id,
+              allocated_amount: amountToLink,
+            })
+          
+          if (headerError) throw headerError
+
+          // 2. Link Items
+          const itemsToLink = Object.entries(poData.selectedItems).map(([itemId, quantity]) => ({
+            maintenance_id: maintenance.id,
+            purchase_order_item_id: itemId,
+            quantity_used: quantity,
+          }))
+
+          if (itemsToLink.length > 0) {
+             const { error: itemsError } = await supabase
+              .from("maintenance_purchase_order_items")
+              .insert(itemsToLink)
+             if (itemsError) throw itemsError
+          }
+        }
+      }
+
       setFormData({
         description: "",
         cost: "",
@@ -176,6 +282,7 @@ export function MaintenanceForm({
       })
       setUseOwnSpareParts(false)
       setSelectedSpareParts([])
+      setSelectedPOs([])
 
       if (onSuccess) {
         onSuccess()
@@ -192,6 +299,50 @@ export function MaintenanceForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Linked Purchase Orders Section (Top) */}
+      <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
+        <div className="flex justify-between items-center">
+          <Label className="text-base font-semibold">Vincular Orden de Compra (Opcional)</Label>
+          {!showPOSelector && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowPOSelector(true)}>
+              {selectedPOs.length > 0 ? "Agregar otra OC" : "Buscar OC"}
+            </Button>
+          )}
+        </div>
+        
+        {showPOSelector && (
+          <div className="space-y-2">
+            <PurchaseOrderSelector 
+              onSelect={handlePOSelect} 
+              selectedPOs={selectedPOs} 
+            />
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowPOSelector(false)} className="w-full text-muted-foreground">
+              Cancelar búsqueda
+            </Button>
+          </div>
+        )}
+
+        {selectedPOs.length > 0 && !showPOSelector && (
+          <div className="space-y-2">
+            {selectedPOs.map((data) => (
+              <div key={data.po.id} className="flex items-start justify-between p-3 bg-background rounded border">
+                <div>
+                  <p className="font-bold text-sm">{data.po.order_number}</p>
+                  <p className="text-xs text-muted-foreground">{data.po.supplier_name}</p>
+                  <p className="text-xs mt-1">Asignado: ${data.allocatedAmount.toLocaleString()}</p>
+                  {Object.keys(data.selectedItems).length > 0 && (
+                    <p className="text-xs text-blue-600 mt-1">{Object.keys(data.selectedItems).length} ítems vinculados</p>
+                  )}
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handlePORemove(data.po.id)}>
+                  <TrashIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {!vehicleId && vehicles.length > 0 && (
         <div className="space-y-2">
           <Label htmlFor="vehicle">Vehículo</Label>
