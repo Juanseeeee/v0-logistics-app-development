@@ -149,6 +149,11 @@ export function PurchaseOrderForm({
         poNumber = `OCPR${String(Date.now()).slice(-8)}_${String((count || 0) + 1).padStart(6, "0")}`
       }
 
+      const notesWithIva =
+        applyIva
+          ? `${formData.notes || ""}${formData.notes ? " | " : ""}IVA:${ivaRate}%`
+          : formData.notes || ""
+
       const orderData = {
         order_number: poNumber,
         po_number: poNumber,
@@ -163,11 +168,9 @@ export function PurchaseOrderForm({
         delivery_province: formData.delivery_province,
         delivery_date: formData.delivery_date || null,
         payment_terms: formData.payment_terms,
-        subtotal,
-        iva: ivaAmount,
         total,
         status: formData.status,
-        notes: formData.notes || null,
+        notes: notesWithIva || null,
       }
 
       if (existingOrder) {
