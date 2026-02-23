@@ -36,6 +36,15 @@ export default function L2TripsPage() {
   const [originFilter, setOriginFilter] = useState("")
   const [destinationFilter, setDestinationFilter] = useState("")
   const [productFilter, setProductFilter] = useState("")
+  // Nuevos filtros
+  const [categoryFilter, setCategoryFilter] = useState("")
+  const [clientInvoiceNumberFilter, setClientInvoiceNumberFilter] = useState("")
+  const [clientInvoiceDateFilter, setClientInvoiceDateFilter] = useState("")
+  const [thirdPartyTransportFilter, setThirdPartyTransportFilter] = useState("")
+  const [thirdPartyInvoiceFilter, setThirdPartyInvoiceFilter] = useState("")
+  const [thirdPartyPaymentDateFilter, setThirdPartyPaymentDateFilter] = useState("")
+  const [thirdPartyPaymentStatusFilter, setThirdPartyPaymentStatusFilter] = useState("")
+
   const [sortField, setSortField] = useState<"date" | "invoice_date">("invoice_date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
@@ -55,6 +64,13 @@ export default function L2TripsPage() {
     originFilter,
     destinationFilter,
     productFilter,
+    categoryFilter,
+    clientInvoiceNumberFilter,
+    clientInvoiceDateFilter,
+    thirdPartyTransportFilter,
+    thirdPartyInvoiceFilter,
+    thirdPartyPaymentDateFilter,
+    thirdPartyPaymentStatusFilter,
   ])
 
   const loadData = async () => {
@@ -186,9 +202,50 @@ export default function L2TripsPage() {
       filtered = filtered.filter((trip) => trip.destination === destinationFilter)
     }
 
-    // Status filter
+    // Status filter (Client)
     if (statusFilter && statusFilter !== "all") {
       filtered = filtered.filter((trip) => trip.client_payment_status === statusFilter)
+    }
+
+    // Category filter
+    if (categoryFilter && categoryFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.category === categoryFilter)
+    }
+
+    // Client Invoice Number
+    if (clientInvoiceNumberFilter) {
+      filtered = filtered.filter((trip) => 
+        trip.client_invoice_number?.toLowerCase().includes(clientInvoiceNumberFilter.toLowerCase())
+      )
+    }
+
+    // Client Invoice Date
+    if (clientInvoiceDateFilter) {
+      filtered = filtered.filter((trip) => trip.client_invoice_date === clientInvoiceDateFilter)
+    }
+
+    // Third Party Transport
+    if (thirdPartyTransportFilter) {
+      filtered = filtered.filter((trip) => 
+        trip.third_party_transport?.toLowerCase().includes(thirdPartyTransportFilter.toLowerCase())
+      )
+    }
+
+    // Third Party Invoice
+    if (thirdPartyInvoiceFilter) {
+      filtered = filtered.filter((trip) => 
+        trip.third_party_invoice?.toLowerCase().includes(thirdPartyInvoiceFilter.toLowerCase())
+      )
+    }
+
+    // Third Party Payment Date
+    if (thirdPartyPaymentDateFilter) {
+      filtered = filtered.filter((trip) => trip.third_party_payment_date === thirdPartyPaymentDateFilter)
+    }
+
+    // Third Party Payment Status
+    if (thirdPartyPaymentStatusFilter && thirdPartyPaymentStatusFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.third_party_payment_status === thirdPartyPaymentStatusFilter)
     }
 
     // Date range
@@ -234,6 +291,8 @@ export default function L2TripsPage() {
       Rubro: trip.category,
       Fecha: formatLocalDate(trip.invoice_date),
       RTO: trip.invoice_number,
+      "N° Comp. Cliente": trip.client_invoice_number,
+      "F. Pasada Cliente": formatLocalDate(trip.client_invoice_date),
       Cliente: trip.clients?.company,
       "Tara Origen": trip.tare_origin,
       Bruto: trip.gross_weight,
@@ -247,6 +306,8 @@ export default function L2TripsPage() {
       "$/Viaje": trip.trip_amount,
       Producto: trip.products?.name,
       Transporte: trip.third_party_transport,
+      "N° Comp. Tercero": trip.third_party_invoice,
+      "F. Pago Tercero": formatLocalDate(trip.third_party_payment_date),
       Carga: trip.origin,
       "Empresa Proveedora": trip.origin_company,
       Descarga: trip.destination,
@@ -519,7 +580,7 @@ export default function L2TripsPage() {
           <TabsContent value="l2" className="space-y-4">
             {/* Filters */}
             <div className="bg-card rounded-lg border p-4 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -529,23 +590,21 @@ export default function L2TripsPage() {
                     className="pl-8"
                   />
                 </div>
-                <Select value={clientFilter} onValueChange={setClientFilter}>
+
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos los clientes" />
+                    <SelectValue placeholder="Rubro" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos los clientes</SelectItem>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.company}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="Propio">Propio</SelectItem>
+                    <SelectItem value="Tercero">Tercero</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={productFilter} onValueChange={setProductFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos los productos" />
+                    <SelectValue placeholder="Producto" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los productos</SelectItem>
@@ -557,21 +616,14 @@ export default function L2TripsPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
-                    <SelectItem value="COBRADO">COBRADO</SelectItem>
-                    <SelectItem value="PARCIAL">PARCIAL</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="grid grid-cols-2 gap-2">
+                   <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                   <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                </div>
 
                 <Select value={originFilter} onValueChange={setOriginFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos los orígenes" />
+                    <SelectValue placeholder="Origen" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los orígenes</SelectItem>
@@ -585,7 +637,7 @@ export default function L2TripsPage() {
 
                 <Select value={destinationFilter} onValueChange={setDestinationFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos los destinos" />
+                    <SelectValue placeholder="Destino" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los destinos</SelectItem>
@@ -598,9 +650,80 @@ export default function L2TripsPage() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3">Filtros Cliente</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <Select value={clientFilter} onValueChange={setClientFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los clientes</SelectItem>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.company}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input 
+                    placeholder="N° Comp. Cliente" 
+                    value={clientInvoiceNumberFilter} 
+                    onChange={(e) => setClientInvoiceNumberFilter(e.target.value)} 
+                  />
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Fecha Pasada Cliente</span>
+                    <Input type="date" value={clientInvoiceDateFilter} onChange={(e) => setClientInvoiceDateFilter(e.target.value)} />
+                  </div>
+
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Estado Cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
+                      <SelectItem value="COBRADO">COBRADO</SelectItem>
+                      <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium mb-3">Filtros Terceros</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                   <Input 
+                    placeholder="Transporte" 
+                    value={thirdPartyTransportFilter} 
+                    onChange={(e) => setThirdPartyTransportFilter(e.target.value)} 
+                  />
+
+                  <Input 
+                    placeholder="N° Comp. Tercero" 
+                    value={thirdPartyInvoiceFilter} 
+                    onChange={(e) => setThirdPartyInvoiceFilter(e.target.value)} 
+                  />
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Fecha Comp. Tercero</span>
+                    <Input type="date" value={thirdPartyPaymentDateFilter} onChange={(e) => setThirdPartyPaymentDateFilter(e.target.value)} />
+                  </div>
+
+                  <Select value={thirdPartyPaymentStatusFilter} onValueChange={setThirdPartyPaymentStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Estado Tercero" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="IMPAGO">IMPAGO</SelectItem>
+                      <SelectItem value="PAGADO">PAGADO</SelectItem>
+                      <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -632,6 +755,7 @@ export default function L2TripsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Rubro</TableHead>
                       <TableHead className="cursor-pointer hover:bg-muted/50" onClick={toggleSort}>
                         <div className="flex items-center gap-1">
                           Fecha
@@ -639,21 +763,30 @@ export default function L2TripsPage() {
                         </div>
                       </TableHead>
                       <TableHead>RTO</TableHead>
+                      <TableHead>Comp. Cliente</TableHead>
+                      <TableHead>F. Pasada</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Origen</TableHead>
                       <TableHead>Destino</TableHead>
                       <TableHead className="text-right">TN</TableHead>
                       <TableHead className="text-right">$/Viaje</TableHead>
-                      <TableHead>Estado</TableHead>
+                      <TableHead>Transporte</TableHead>
+                      <TableHead>Comp. 3ero</TableHead>
+                      <TableHead>F. Pago 3ero</TableHead>
+                      <TableHead>Est. Cliente</TableHead>
+                      <TableHead>Est. 3ero</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentTrips.map((trip) => (
                       <TableRow key={trip.id}>
+                        <TableCell>{trip.category}</TableCell>
                         <TableCell>{formatLocalDate(trip.invoice_date)}</TableCell>
                         <TableCell>{trip.invoice_number}</TableCell>
+                        <TableCell>{trip.client_invoice_number || "-"}</TableCell>
+                        <TableCell>{formatLocalDate(trip.client_invoice_date)}</TableCell>
                         <TableCell>{trip.clients?.company}</TableCell>
                         <TableCell>{trip.products?.name}</TableCell>
                         <TableCell>{trip.origin}</TableCell>
@@ -662,6 +795,9 @@ export default function L2TripsPage() {
                         <TableCell className="text-right">
                           ${Number.parseFloat(trip.trip_amount || 0).toLocaleString("es-AR")}
                         </TableCell>
+                        <TableCell>{trip.third_party_transport || "-"}</TableCell>
+                        <TableCell>{trip.third_party_invoice || "-"}</TableCell>
+                        <TableCell>{formatLocalDate(trip.third_party_payment_date)}</TableCell>
                         <TableCell>
                           <span
                             className={`px-2 py-1 rounded text-xs ${
@@ -673,6 +809,19 @@ export default function L2TripsPage() {
                             }`}
                           >
                             {trip.client_payment_status}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              trip.third_party_payment_status === "PAGADO"
+                                ? "bg-green-100 text-green-800"
+                                : trip.third_party_payment_status === "PARCIAL"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {trip.third_party_payment_status || "IMPAGO"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
