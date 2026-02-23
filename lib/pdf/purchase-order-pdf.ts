@@ -93,11 +93,13 @@ function drawSinglePage(
   const boxSize = 16
 
   if (logo) {
-    const targetW = 45
+    const maxW = 70
+    const maxH = 18
     const ratio = logo.height / logo.width
-    const targetH = targetW * ratio
-    const logoY = headerTopY + 1 + boxSize / 2 - targetH / 2
-    doc.addImage(logo.data, "PNG", marginLeft + 3, logoY, targetW, targetH)
+    const fitW = Math.min(maxW, maxH / ratio)
+    const fitH = fitW * ratio
+    const logoY = headerTopY + 1 + boxSize / 2 - fitH / 2
+    doc.addImage(logo.data, "PNG", marginLeft + 3, logoY, fitW, fitH)
   }
   doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.5)
@@ -152,7 +154,7 @@ function drawSinglePage(
   // LEFT: Company name and address
   doc.setFont("helvetica", "bold")
   doc.setFontSize(8)
-  doc.text("PINTAR JUNIN SERVICIOS INDUSTRIALES SRL", marginLeft + 3, companyY + 5)
+  doc.text("CRONOS LOGISTICA SUSTENTABLE", marginLeft + 3, companyY + 5)
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(6.5)
@@ -350,7 +352,7 @@ export async function generatePurchaseOrderPDF(order: PurchaseOrder) {
     format: "a4",
   })
 
-  const logo = await loadImageWithSize("/images/logo-pintar-junin.png")
+  const logo = await loadImageWithSize("/images/logo-cronos.png")
   drawSinglePage(doc, order, logo, "ORIGINAL")
   doc.addPage()
   drawSinglePage(doc, order, logo, "DUPLICADO")
