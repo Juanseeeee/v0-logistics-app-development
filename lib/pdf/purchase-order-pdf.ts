@@ -45,27 +45,39 @@ async function loadImageAsBase64(path: string): Promise<string> {
   }
 }
 
-type LoadedImage = { data: string; width: number; height: number }
+type LoadedImage = { data: string; width: number; height: number; format: "PNG" | "JPEG" }
 
 async function loadImageWithSize(path: string): Promise<LoadedImage | null> {
   try {
     const response = await fetch(path)
+    if (!response.ok) return null
     const blob = await response.blob()
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onloadend = () => {
         const data = reader.result as string
         const img = new Image()
-        img.onload = () => resolve({ data, width: img.naturalWidth, height: img.naturalHeight })
-        img.onerror = reject
+        img.onload = () => {
+          const type: "PNG" | "JPEG" = blob.type && blob.type.includes("jpeg") ? "JPEG" : "PNG"
+          resolve({ data, width: img.naturalWidth, height: img.naturalHeight, format: type })
+        }
+        img.onerror = () => resolve(null)
         img.src = data
       }
-      reader.onerror = reject
+      reader.onerror = () => resolve(null)
       reader.readAsDataURL(blob)
     })
   } catch {
     return null
   }
+}
+
+async function tryLoadLogo(paths: string[]): Promise<LoadedImage | null> {
+  for (const p of paths) {
+    const img = await loadImageWithSize(p)
+    if (img) return img
+  }
+  return null
 }
 
 function formatNumber(n: number, decimals = 3): string {
@@ -99,7 +111,7 @@ function drawSinglePage(
     const fitW = Math.min(maxW, maxH / ratio)
     const fitH = fitW * ratio
     const logoY = headerTopY + 1 + boxSize / 2 - fitH / 2
-    doc.addImage(logo.data, "PNG", marginLeft + 3, logoY, fitW, fitH)
+    doc.addImage(logo.data, logo.format, marginLeft + 3, logoY, fitW, fitH)
   }
   doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.5)
@@ -352,7 +364,11 @@ export async function generatePurchaseOrderPDF(order: PurchaseOrder) {
     format: "a4",
   })
 
-  const logo = await loadImageWithSize("/images/logo-cronos.png")
+  const logo = await tryLoadLogo([
+    "/images/logo-cronos.png",
+    "/logo-blue.png",
+    "/logo.png",
+  ])
   drawSinglePage(doc, order, logo, "ORIGINAL")
   doc.addPage()
   drawSinglePage(doc, order, logo, "DUPLICADO")
