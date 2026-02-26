@@ -146,22 +146,22 @@ export default function DocumentsPage() {
 
         {/* Alertas de documentos */}
         {alerts.length > 0 && (
-          <Card className="mb-6 border-red-200 bg-red-50">
+          <Card className="mb-6 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-red-700">
+              <CardTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
                 <AlertTriangle className="h-5 w-5" />
                 Documentos que Requieren Atención
               </CardTitle>
-              <CardDescription>{alerts.length} documento(s) vencido(s) o por vencer</CardDescription>
+              <CardDescription className="dark:text-red-300/70">{alerts.length} documento(s) vencido(s) o por vencer</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {alerts.map((alert) => (
-                  <div key={alert.id} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                  <div key={alert.id} className="flex items-center justify-between p-3 bg-white dark:bg-card rounded-lg border dark:border-red-900/50">
                     <div className="flex items-center gap-3">
                       <FileText className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="font-medium">{alert.document_type_name}</p>
+                        <p className="font-medium dark:text-foreground">{alert.document_type_name}</p>
                         <p className="text-sm text-muted-foreground">{alert.entity_name || "General"}</p>
                       </div>
                     </div>
@@ -170,8 +170,8 @@ export default function DocumentsPage() {
                         variant={alert.urgency_level === "expired" ? "destructive" : "outline"}
                         className={
                           alert.urgency_level === "expired"
-                            ? "bg-red-100 text-red-700 border-red-300"
-                            : "bg-orange-100 text-orange-700 border-orange-300"
+                            ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/50 dark:text-red-200 dark:border-red-800"
+                            : "bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/50 dark:text-orange-200 dark:border-orange-800"
                         }
                       >
                         {alert.urgency_level === "expired" ? "VENCIDO" : `Vence en ${alert.days_until_expiry} días`}

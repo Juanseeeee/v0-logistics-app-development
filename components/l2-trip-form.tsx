@@ -32,6 +32,16 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
   const [showQuickLocationDialog, setShowQuickLocationDialog] = useState(false)
   const [quickLocationType, setQuickLocationType] = useState<"origin" | "destination">("origin")
 
+  // Estado para controlar si las TN Descargadas fueron editadas manualmente
+  const [isManualTons, setIsManualTons] = useState(() => {
+    if (!trip?.tons_delivered || !trip?.net_destination) return false
+    const netDest = Number.parseFloat(trip.net_destination)
+    const delivered = Number.parseFloat(trip.tons_delivered)
+    const calculated = netDest / 1000
+    // Si la diferencia es mayor a 0.005, asumimos que fue editado manualmente
+    return Math.abs(delivered - calculated) > 0.005
+  })
+
   const [formData, setFormData] = useState({
     trip_id: trip?.trip_id || trip?._l1Trip?.id || null, // Add trip_id to link with L1 trip
     invoice_number: trip?.invoice_number || "",
@@ -381,14 +391,14 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
 
   useEffect(() => {
     // Auto-fill TN Descargadas with Net Destination converted to tons (kg / 1000)
-    if (formData.net_destination) {
+    if (formData.net_destination && !isManualTons) {
       const tons = Number.parseFloat(formData.net_destination) / 1000
       setFormData((prev) => ({
         ...prev,
         tons_delivered: tons.toFixed(3),
       }))
     }
-  }, [formData.net_destination])
+  }, [formData.net_destination, isManualTons])
 
   useEffect(() => {
     if (formData.tariff_rate && formData.tons_delivered) {
@@ -733,7 +743,10 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                 type="number"
                 step="0.01"
                 value={formData.tons_delivered}
-                onChange={(e) => setFormData({ ...formData, tons_delivered: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, tons_delivered: e.target.value })
+                  setIsManualTons(true)
+                }}
                 placeholder="Se autocompleta, puede editarse"
               />
             </div>

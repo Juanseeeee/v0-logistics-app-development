@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, FileText, X, Loader2 } from "lucide-react"
@@ -30,6 +31,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [hasNoExpiry, setHasNoExpiry] = useState(false)
   const [formData, setFormData] = useState({
     documentTypeId: "",
     entityName: "",
@@ -86,10 +88,10 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
         file_name: file.name,
         file_size: file.size,
         issue_date: formData.issueDate || null,
-        expiry_date: formData.expiryDate || null,
+        expiry_date: hasNoExpiry ? null : formData.expiryDate || null,
         notes: formData.notes || null,
         uploaded_by: userId,
-        company_user_id: null,
+        company_user_id: userRole === "company" || userRole === "driver" ? userId : null,
       })
 
       if (error) throw error
@@ -98,6 +100,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
 
       // Resetear formulario
       setFile(null)
+      setHasNoExpiry(false)
       setFormData({
         documentTypeId: "",
         entityName: "",
@@ -217,12 +220,34 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
           {/* Fecha de Vencimiento */}
           <div className="space-y-2">
             <Label htmlFor="expiryDate">Fecha de Vencimiento</Label>
-            <Input
-              id="expiryDate"
-              type="date"
-              value={formData.expiryDate}
-              onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-            />
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Input
+                  id="expiryDate"
+                  type="date"
+                  value={formData.expiryDate}
+                  onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                  disabled={hasNoExpiry}
+                  className={hasNoExpiry ? "opacity-50 cursor-not-allowed" : ""}
+                />
+                <div className="flex items-center space-x-2 min-w-[140px]">
+                  <Checkbox
+                    id="noExpiry"
+                    checked={hasNoExpiry}
+                    onCheckedChange={(checked) => {
+                      setHasNoExpiry(!!checked)
+                      if (checked) {
+                        setFormData({ ...formData, expiryDate: "" })
+                      }
+                    }}
+                  />
+                  <Label
+                    htmlFor="noExpiry"
+                    className="text-sm font-medium leading-none cursor-pointer"
+                  >
+                    Sin vencimiento
+                  </Label>
+                </div>
+              </div>
           </div>
 
           {/* Notas */}
