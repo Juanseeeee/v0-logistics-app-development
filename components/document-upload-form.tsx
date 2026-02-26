@@ -89,7 +89,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
         expiry_date: formData.expiryDate || null,
         notes: formData.notes || null,
         uploaded_by: userId,
-        company_user_id: null,
+        company_user_id: userRole === "company" || userRole === "driver" ? userId : null,
       })
 
       if (error) throw error
