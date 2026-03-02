@@ -4,7 +4,7 @@ VALUES ('documents', 'documents', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Enable RLS on storage.objects
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; -- Comentado porque suele estar habilitado y requiere permisos de owner
 
 -- Drop existing policies if any
 DROP POLICY IF EXISTS "Authenticated users can upload documents" ON storage.objects;
