@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trash2, Power, PowerOff, Search, ChevronLeft, ChevronRight, Unlock, Pencil } from "lucide-react"
+import { Trash2, Power, PowerOff, Search, ChevronLeft, ChevronRight, Unlock, Pencil, RefreshCw, Users } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 
@@ -52,6 +52,7 @@ export function DriverList({
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [syncing, setSyncing] = useState(false)
 
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null)
   const [editFormData, setEditFormData] = useState({
@@ -82,6 +83,37 @@ export function DriverList({
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedDrivers = filteredDrivers.slice(startIndex, endIndex)
+
+  const handleSyncUsers = async () => {
+    setSyncing(true)
+    try {
+      const response = await fetch("/api/admin/sync-drivers", {
+        method: "POST",
+      })
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Error en la sincronización")
+      }
+      
+      if (data.results) {
+        const successCount = data.results.filter((r: any) => r.status === "success").length
+        const errorCount = data.results.filter((r: any) => r.status === "error").length
+        const skippedCount = data.results.filter((r: any) => r.status === "skipped").length
+        
+        alert(`Sincronización completada:\n- Creados: ${successCount}\n- Errores: ${errorCount}\n- Omitidos: ${skippedCount}`)
+      } else {
+        alert(data.message || "Sincronización completada")
+      }
+      
+      router.refresh()
+    } catch (error: any) {
+      console.error("Error:", error)
+      alert(`Error al sincronizar: ${error.message}`)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     setUpdating(id)
@@ -227,6 +259,22 @@ export function DriverList({
             <SelectItem value="100">100 por página</SelectItem>
           </SelectContent>
         </Select>
+        
+        {(userRole === "admin" || userRole === "owner") && (
+          <Button
+            variant="outline"
+            onClick={handleSyncUsers}
+            disabled={syncing}
+            className="w-full sm:w-auto text-[#0038ae] border-[#0038ae] hover:bg-[#0038ae]/10"
+          >
+            {syncing ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Users className="mr-2 h-4 w-4" />
+            )}
+            Sincronizar Usuarios
+          </Button>
+        )}
       </div>
 
       <div className="border rounded-lg">

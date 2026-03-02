@@ -11,8 +11,16 @@ import { ThemeToggle } from "@/components/theme-toggle"
 async function login(formData: FormData) {
   "use server"
 
-  const email = formData.get("email") as string
+  let email = formData.get("email") as string
   const password = formData.get("password") as string
+
+  // Check if email is actually a CUIT (or formatted CUIT)
+  if (!email.includes("@")) {
+    const cleanCuit = email.replace(/[^0-9]/g, "")
+    if (cleanCuit.length === 11) {
+      email = `${cleanCuit}@choferes.cronos`
+    }
+  }
 
   const supabase = await createClient()
 
@@ -26,11 +34,20 @@ async function login(formData: FormData) {
   }
 
   if (authData.user) {
-    const { data: userData } = await supabase.from("users").select("role").eq("id", authData.user.id).maybeSingle()
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role, must_change_password")
+      .eq("id", authData.user.id)
+      .maybeSingle()
 
     if (!userData || !userData.role) {
       await supabase.auth.signOut()
       redirect("/auth/login?error=no_role")
+    }
+
+    // Check if password change is required
+    if (userData.must_change_password) {
+      redirect("/auth/change-password")
     }
 
     // Redirect based on role
@@ -83,8 +100,8 @@ export default function LoginPage({
         <CardContent>
           <form action={login} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="tu@email.com" required />
+              <Label htmlFor="email">Email o CUIT</Label>
+              <Input id="email" name="email" type="text" placeholder="Email o CUIT (11 dígitos)" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
