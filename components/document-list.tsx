@@ -75,10 +75,25 @@ export function DocumentList({ userRole, userId }: Props) {
     const { data, error } = await query
 
     if (data) {
-      const formatted = data.map((doc: any) => ({
-        ...doc,
-        document_type_name: doc.document_types.name,
-      }))
+      const formatted = await Promise.all(
+        data.map(async (doc: any) => {
+          let fileUrl = doc.file_url
+
+          // Si es un path de storage (no empieza con http y no es el placeholder antiguo), generar URL firmada
+          if (fileUrl && !fileUrl.startsWith("http") && !fileUrl.startsWith("/uploads/")) {
+            const { data: signedData } = await supabase.storage.from("documents").createSignedUrl(fileUrl, 3600)
+            if (signedData) {
+              fileUrl = signedData.signedUrl
+            }
+          }
+
+          return {
+            ...doc,
+            document_type_name: doc.document_types.name,
+            file_url: fileUrl,
+          }
+        }),
+      )
       setDocuments(formatted)
     }
     setLoading(false)
