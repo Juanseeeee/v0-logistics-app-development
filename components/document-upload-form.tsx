@@ -70,12 +70,21 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
     try {
       const supabase = createClient()
 
-      // Subir archivo a Vercel Blob o Supabase Storage
+      // Subir archivo a Supabase Storage
       const fileExt = file.name.split(".").pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+      const filePath = `${userId}/${fileName}`
 
-      // Por ahora usamos un placeholder URL - en producción aquí subirías a Blob
-      const fileUrl = `/uploads/${fileName}`
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, file)
+
+      if (uploadError) {
+        throw new Error(uploadError.message)
+      }
+
+      // Guardar el path del archivo para generar URL firmada luego
+      // const fileUrl = filePath
 
       // Insertar documento en la base de datos
       const selectedDocType = documentTypes.find((dt) => dt.id === formData.documentTypeId)
@@ -84,7 +93,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
         document_type_id: formData.documentTypeId,
         entity_type: selectedDocType?.entity_type || "company",
         entity_name: formData.entityName || null,
-        file_url: fileUrl,
+        file_url: filePath,
         file_name: file.name,
         file_size: file.size,
         issue_date: formData.issueDate || null,
