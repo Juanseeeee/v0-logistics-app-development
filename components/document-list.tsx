@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Building2, Truck, Users, Download, Search, Calendar, FileText, Trash2 } from "lucide-react"
+import { Building2, Truck, Users, Download, Search, Calendar, FileText, Trash2, Edit } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { DocumentEditDialog } from "./document-edit-dialog"
 
 type Document = {
   id: string
@@ -22,6 +23,15 @@ type Document = {
   expiry_date: string | null
   notes: string | null
   created_at: string
+}
+
+// Helper para formatear fechas sin problemas de timezone
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return "-"
+  // Aseguramos que tomamos solo la parte de la fecha YYYY-MM-DD
+  const datePart = dateString.split("T")[0]
+  const [year, month, day] = datePart.split("-")
+  return `${day}/${month}/${year}`
 }
 
 type Props = {
@@ -38,6 +48,7 @@ export function DocumentList({ userRole, userId }: Props) {
   const [filterDateFrom, setFilterDateFrom] = useState("")
   const [filterDateTo, setFilterDateTo] = useState("")
   const [documentTypes, setDocumentTypes] = useState<any[]>([])
+  const [editingDocument, setEditingDocument] = useState<Document | null>(null)
   const supabase = createClient()
 
   const showAllTabs = userRole === "admin" || userRole === "owner" || userRole === "manager" || userRole === "documents" || userRole === "fleet_docs"
@@ -179,6 +190,13 @@ export function DocumentList({ userRole, userId }: Props) {
 
   return (
     <div>
+      <DocumentEditDialog
+        open={!!editingDocument}
+        onOpenChange={(open) => !open && setEditingDocument(null)}
+        document={editingDocument}
+        onSuccess={fetchDocuments}
+        userId={userId}
+      />
       {showAllTabs ? (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3">
@@ -249,6 +267,7 @@ export function DocumentList({ userRole, userId }: Props) {
                   loading={loading}
                   tab={tab}
                   onDelete={handleDelete}
+                  onEdit={setEditingDocument}
                   getExpiryStatus={getExpiryStatus}
                 />
               </TabsContent>
@@ -303,6 +322,7 @@ export function DocumentList({ userRole, userId }: Props) {
             loading={loading}
             tab={showDriverOnly ? "driver" : "company"}
             onDelete={handleDelete}
+            onEdit={setEditingDocument}
             getExpiryStatus={getExpiryStatus}
           />
         </div>
@@ -316,12 +336,14 @@ function DocumentTable({
   loading,
   tab,
   onDelete,
+  onEdit,
   getExpiryStatus,
 }: {
   documents: Document[]
   loading: boolean
   tab: string
   onDelete: (id: string) => void
+  onEdit: (doc: Document) => void
   getExpiryStatus: (date: string | null) => any
 }) {
   return (
@@ -375,7 +397,7 @@ function DocumentTable({
                         {doc.issue_date ? (
                           <div className="flex items-center gap-2">
                             <Calendar className="h-3 w-3 text-muted-foreground" />
-                            {new Date(doc.issue_date).toLocaleDateString("es-AR")}
+                            {formatDate(doc.issue_date)}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -385,7 +407,7 @@ function DocumentTable({
                         {doc.expiry_date ? (
                           <div className="flex items-center gap-2">
                             <Calendar className="h-3 w-3 text-muted-foreground" />
-                            {new Date(doc.expiry_date).toLocaleDateString("es-AR")}
+                            {formatDate(doc.expiry_date)}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -403,14 +425,22 @@ function DocumentTable({
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           {doc.file_url && (
-                            <a href={doc.file_url} download target="_blank" rel="noopener noreferrer">
-                              <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
                                 <Download className="h-4 w-4" />
-                              </Button>
-                            </a>
+                              </a>
+                            </Button>
                           )}
-                          <Button variant="ghost" size="sm" onClick={() => onDelete(doc.id)}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                          <Button variant="ghost" size="sm" onClick={() => onEdit(doc)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => onDelete(doc.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
