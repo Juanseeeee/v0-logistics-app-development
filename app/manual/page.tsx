@@ -57,7 +57,7 @@ export default async function ManualPage() {
           <h1 className="text-5xl font-bold mb-4">Manual de Usuario</h1>
           <p className="text-xl text-muted-foreground mb-2">Sistema de Gestión Logística Cronos</p>
           <Badge variant="outline" className="text-sm">
-            Versión 1.0 - Diciembre 2024
+            Versión 1.1 - Marzo 2026
           </Badge>
         </div>
 
@@ -87,7 +87,7 @@ export default async function ManualPage() {
               </a>
               <a href="#logistics" className="p-3 rounded-lg hover:bg-muted transition-colors">
                 <div className="font-semibold text-[#0038ae]">5. Gestión Logística</div>
-                <div className="text-sm text-muted-foreground">Viajes y choferes</div>
+                <div className="text-sm text-muted-foreground">Viajes, choferes y operaciones masivas</div>
               </a>
               <a href="#support" className="p-3 rounded-lg hover:bg-muted transition-colors">
                 <div className="font-semibold text-[#0038ae]">6. Soporte</div>
@@ -915,6 +915,84 @@ export default async function ManualPage() {
             </CardContent>
           </Card>
         </div>
+
+          {/* 5.6 Bulk Operations */}
+          <div id="bulk-operations" className="scroll-mt-24">
+            <Card className="mb-6">
+              <CardHeader className="bg-muted">
+                <CardTitle className="text-xl">5.6 Operaciones Masivas (Línea 2)</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <p className="mb-4">
+                  Para optimizar la gestión de múltiples viajes, el sistema permite realizar operaciones masivas de facturación y liquidación en la pestaña "Viajes Completados".
+                </p>
+                
+                <h4 className="font-semibold text-lg mb-3">Facturación Masiva</h4>
+                <div className="space-y-3 mb-6">
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">1</Badge>
+                     <p>Seleccione los viajes que desea facturar usando las casillas de verificación a la izquierda.</p>
+                  </div>
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">2</Badge>
+                     <p>Haga clic en el botón "Facturar" en la parte superior.</p>
+                  </div>
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">3</Badge>
+                     <p>Ingrese los datos comunes (N° Factura, Fecha, Estado) que se aplicarán a todos los viajes seleccionados.</p>
+                  </div>
+                   <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">4</Badge>
+                     <p>Confirme la operación para actualizar los registros.</p>
+                  </div>
+                </div>
+
+                <h4 className="font-semibold text-lg mb-3">Liquidación Masiva (Pagos a Terceros)</h4>
+                <div className="space-y-3 mb-6">
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">1</Badge>
+                     <p>Seleccione los viajes a liquidar.</p>
+                  </div>
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">2</Badge>
+                     <p>Haga clic en el botón "Liquidar".</p>
+                  </div>
+                  <div className="flex gap-3">
+                     <Badge className="bg-[#0038ae] h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 p-0">3</Badge>
+                     <p>Ingrese la información de pago (Estado, Fecha, N° Comprobante) para los transportistas.</p>
+                  </div>
+                </div>
+
+                 <h4 className="font-semibold text-lg mb-3">Visualización y Reportes</h4>
+                 <p className="mb-3">
+                  Utilice las pestañas superiores para filtrar rápidamente entre:
+                 </p>
+                 <ul className="list-disc ml-6 space-y-1 mb-4">
+                   <li><strong>Todos:</strong> Lista completa de viajes terminados.</li>
+                   <li><strong>Facturados:</strong> Viajes con factura de cliente emitida.</li>
+                   <li><strong>Liquidados:</strong> Viajes con pago a tercero realizado.</li>
+                   <li><strong>Completos:</strong> Viajes cerrados administrativa y financieramente.</li>
+                 </ul>
+                 <p className="mb-3">
+                  Puede descargar reportes en Excel o PDF usando el botón "Exportar" situado a la derecha de los filtros.
+                 </p>
+
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex gap-2">
+                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="font-semibold text-blue-900 mb-1">Validación de Datos</p>
+                      <p className="text-blue-800 text-sm">
+                        El sistema validará automáticamente que las fechas sean coherentes (ej: fecha de cobro posterior a factura) y que no falten datos obligatorios antes de procesar los cambios.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
         {/* Section 6: Support */}
         <div id="support" className="mb-12 scroll-mt-24">
