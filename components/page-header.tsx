@@ -27,9 +27,9 @@ export function PageHeader({ title, backHref = "/hub", backLabel = "← Volver",
         <div className="flex items-center gap-2">
           <ThemeToggle />
           {showLogout && (
-            <Link href="/auth/signout" prefetch={false}>
-              <Button variant="ghost">Cerrar Sesión</Button>
-            </Link>
+            <form action="/auth/signout" method="post">
+              <Button variant="ghost" type="submit">Cerrar Sesión</Button>
+            </form>
           )}
         </div>
       </div>

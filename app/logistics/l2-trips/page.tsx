@@ -7,12 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { L2TripForm } from "@/components/l2-trip-form"
-import { Plus, Search, Download, Edit, Trash2, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react"
+import { BulkEditDialog } from "@/components/bulk-edit-dialog"
+import { Plus, Search, Download, Edit, Trash2, ChevronLeft, ChevronRight, ArrowRight, FileText, Banknote, ListChecks, Filter, X, FileSpreadsheet, FileIcon } from "lucide-react"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
+import jsPDF from "jspdf"
+import "jspdf-autotable"
 
 export default function L2TripsPage() {
   const [l2Trips, setL2Trips] = useState<any[]>([])
@@ -24,8 +30,11 @@ export default function L2TripsPage() {
   const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
+  const [bulkEditMode, setBulkEditMode] = useState<"full" | "billing" | "settlement">("full")
   const [selectedTrip, setSelectedTrip] = useState<any>(null)
   const [activeTab, setActiveTab] = useState("l2")
+  const [selectedTrips, setSelectedTrips] = useState<string[]>([])
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -71,6 +80,9 @@ export default function L2TripsPage() {
     thirdPartyInvoiceFilter,
     thirdPartyPaymentDateFilter,
     thirdPartyPaymentStatusFilter,
+    activeTab,
+    sortField,
+    sortDirection,
   ])
 
   const loadData = async () => {
@@ -109,7 +121,7 @@ export default function L2TripsPage() {
             semi:vehicles!drivers_semi_id_fkey(id, patent_chasis)
           )
         `)
-        .eq("line", "L2")
+        .in("line", ["L2", "L1/L2"])
         .order("date", { ascending: false })
 
       // Only add the NOT IN filter if there are actually L2 trip IDs to exclude
@@ -256,6 +268,27 @@ export default function L2TripsPage() {
       filtered = filtered.filter((trip) => trip.invoice_date <= dateTo)
     }
 
+    // Tab filters
+    if (activeTab === "l2_billed") {
+      filtered = filtered.filter(
+        (t) => t.client_invoice_passed === true && t.client_invoice_number?.trim() && t.client_invoice_date
+      )
+    } else if (activeTab === "l2_settled") {
+      filtered = filtered.filter(
+        (t) => t.third_party_invoice?.trim() && t.third_party_payment_date && t.third_party_payment_status === "PAGADO"
+      )
+    } else if (activeTab === "l2_completed_all") {
+      filtered = filtered.filter(
+        (t) =>
+          t.client_invoice_passed === true &&
+          t.client_invoice_number?.trim() &&
+          t.client_invoice_date &&
+          t.third_party_invoice?.trim() &&
+          t.third_party_payment_date &&
+          t.third_party_payment_status === "PAGADO"
+      )
+    }
+
     filtered.sort((a, b) => {
       const aValue = a[sortField] || ""
       const bValue = b[sortField] || ""
@@ -366,6 +399,53 @@ export default function L2TripsPage() {
     toast.success("Datos exportados exitosamente")
   }
 
+  const handleExportPDF = () => {
+    const doc = new jsPDF()
+    doc.text("Reporte de Viajes L2", 14, 15)
+    doc.setFontSize(10)
+    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Cantidad de viajes: ${filteredTrips.length}`, 14, 28)
+    
+    // Add active tab info
+    let tabName = "Todos L2"
+    if (activeTab === "l2_billed") tabName = "Facturados"
+    else if (activeTab === "l2_settled") tabName = "Liquidados"
+    else if (activeTab === "l2_completed_all") tabName = "Completos"
+    else if (activeTab === "pending") tabName = "Pendientes"
+    
+    doc.text(`Filtro: ${tabName}`, 14, 34)
+
+    const tableData = filteredTrips.map((trip) => [
+      formatLocalDate(trip.invoice_date),
+      trip.invoice_number,
+      trip.clients?.company,
+      trip.drivers?.name,
+      trip.origin,
+      trip.destination,
+      `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`,
+      trip.client_payment_status
+    ])
+
+    ;(doc as any).autoTable({
+      head: [["Fecha", "RTO", "Cliente", "Chofer", "Origen", "Destino", "Monto", "Estado"]],
+      body: tableData,
+      startY: 40,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [41, 128, 185] },
+    })
+    
+    // Add totals
+    const totalAmount = filteredTrips.reduce((sum, t) => sum + (Number.parseFloat(t.trip_amount) || 0), 0)
+    const totalTons = filteredTrips.reduce((sum, t) => sum + (Number.parseFloat(t.tons_delivered) || 0), 0)
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 10
+    doc.text(`Total Monto: $${totalAmount.toLocaleString("es-AR")}`, 14, finalY)
+    doc.text(`Total TN: ${totalTons.toLocaleString("es-AR")}`, 14, finalY + 6)
+
+    doc.save(`reporte_viajes_l2_${tabName}_${new Date().toISOString().split("T")[0]}.pdf`)
+    toast.success("PDF generado exitosamente")
+  }
+
   const exportTripPDF = async (trip: any) => {
     try {
       const response = await fetch("/api/generate-l2-pdf", {
@@ -421,6 +501,11 @@ export default function L2TripsPage() {
     return `${day}/${month}/${year}`
   }
 
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    setSelectedTrips([])
+  }
+
   const promoteToL2 = async (l1Trip: any) => {
     try {
       const supabase = createClient()
@@ -463,6 +548,29 @@ export default function L2TripsPage() {
     }
   }
 
+  const handleBulkEditSuccess = () => {
+    loadData()
+    setSelectedTrips([])
+  }
+
+  const handleBulkBilling = () => {
+    if (selectedTrips.length === 0) return
+    setBulkEditMode("billing")
+    setBulkEditDialogOpen(true)
+  }
+
+  const handleBulkSettlement = () => {
+    if (selectedTrips.length === 0) return
+    setBulkEditMode("settlement")
+    setBulkEditDialogOpen(true)
+  }
+
+  const handleBulkFull = () => {
+    if (selectedTrips.length === 0) return
+    setBulkEditMode("full")
+    setBulkEditDialogOpen(true)
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Cargando...</div>
   }
@@ -498,10 +606,40 @@ export default function L2TripsPage() {
 
       <div className="container mx-auto px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
         <div className="flex flex-wrap justify-end items-center gap-2">
-          <Button onClick={handleExport} variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Exportar Excel
-          </Button>
+          {selectedTrips.length > 0 && activeTab !== "pending" && (
+            <>
+              <Button onClick={handleBulkBilling} variant="secondary">
+                <FileText className="mr-2 h-4 w-4" />
+                Facturar masivamente ({selectedTrips.length})
+              </Button>
+              <Button onClick={handleBulkFull} variant="secondary">
+                <ListChecks className="mr-2 h-4 w-4" />
+                Facturar y liquidar masivamente ({selectedTrips.length})
+              </Button>
+              <Button onClick={handleBulkSettlement} variant="secondary">
+                <Banknote className="mr-2 h-4 w-4" />
+                Liquidar masivamente ({selectedTrips.length})
+              </Button>
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={handleExport}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Exportar Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPDF}>
+                <FileIcon className="mr-2 h-4 w-4" />
+                Exportar PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             onClick={() => {
               setSelectedTrip(null)
@@ -514,10 +652,13 @@ export default function L2TripsPage() {
         </div>
 
         {/* Tabs for L1 pending and L2 completed */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="pending">Pendientes de Completar ({l1Trips.length})</TabsTrigger>
-            <TabsTrigger value="l2">Viajes L2 Completados ({l2Trips.length})</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList className="flex flex-wrap h-auto gap-2 bg-transparent">
+            <TabsTrigger value="pending" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Pendientes ({l1Trips.length})</TabsTrigger>
+            <TabsTrigger value="l2" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos ({l2Trips.length})</TabsTrigger>
+            <TabsTrigger value="l2_billed" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">Facturados</TabsTrigger>
+            <TabsTrigger value="l2_settled" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">Liquidados</TabsTrigger>
+            <TabsTrigger value="l2_completed_all" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Completos</TabsTrigger>
           </TabsList>
 
           {/* Pending L1 Trips Tab */}
@@ -562,8 +703,12 @@ export default function L2TripsPage() {
                           <TableCell>{trip.loading_location}</TableCell>
                           <TableCell>{trip.unloading_location}</TableCell>
                           <TableCell className="text-right">
-                            <Button size="sm" onClick={() => promoteToL2(trip)}>
-                              <ArrowRight className="mr-2 h-4 w-4" />
+                            <Button
+                              size="sm"
+                              onClick={() => promoteToL2(trip)}
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
                               Completar en L2
                             </Button>
                           </TableCell>
@@ -575,156 +720,197 @@ export default function L2TripsPage() {
               </div>
             </div>
           </TabsContent>
+        </Tabs>
 
-          {/* L2 Trips Tab */}
-          <TabsContent value="l2" className="space-y-4">
+        {activeTab !== "pending" && (
+          <div className="space-y-4">
             {/* Filters */}
-            <div className="bg-card rounded-lg border p-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Rubro" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="Propio">Propio</SelectItem>
-                    <SelectItem value="Tercero">Tercero</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={productFilter} onValueChange={setProductFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Producto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los productos</SelectItem>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <div className="grid grid-cols-2 gap-2">
-                   <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                   <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                </div>
-
-                <Select value={originFilter} onValueChange={setOriginFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Origen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los orígenes</SelectItem>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.name}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={destinationFilter} onValueChange={setDestinationFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los destinos</SelectItem>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.name}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="bg-card rounded-lg border p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por RTO, Cliente, Origen, Destino, Chofer..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
               </div>
 
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-medium mb-3">Filtros Cliente</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <Select value={clientFilter} onValueChange={setClientFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los clientes</SelectItem>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.company}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filtros Avanzados
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[800px] p-6" align="end">
+                  <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+                    <div>
+                      <h3 className="text-base font-semibold mb-3">Filtros Generales</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Rubro" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="Propio">Propio</SelectItem>
+                            <SelectItem value="Tercero">Tercero</SelectItem>
+                          </SelectContent>
+                        </Select>
 
-                  <Input 
-                    placeholder="N° Comp. Cliente" 
-                    value={clientInvoiceNumberFilter} 
-                    onChange={(e) => setClientInvoiceNumberFilter(e.target.value)} 
-                  />
+                        <Select value={productFilter} onValueChange={setProductFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Producto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los productos</SelectItem>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
 
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Fecha Pasada Cliente</span>
-                    <Input type="date" value={clientInvoiceDateFilter} onChange={(e) => setClientInvoiceDateFilter(e.target.value)} />
+                        <div className="col-span-2 grid grid-cols-2 gap-2">
+                          <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                          <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                        </div>
+
+                        <Select value={originFilter} onValueChange={setOriginFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Origen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los orígenes</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={destinationFilter} onValueChange={setDestinationFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Destino" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los destinos</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="text-base font-semibold mb-3">Filtros Cliente</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={clientFilter} onValueChange={setClientFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Cliente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los clientes</SelectItem>
+                            {clients.map((client) => (
+                              <SelectItem key={client.id} value={client.id}>
+                                {client.company}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Input 
+                          placeholder="N° Comp. Cliente" 
+                          value={clientInvoiceNumberFilter} 
+                          onChange={(e) => setClientInvoiceNumberFilter(e.target.value)} 
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Fecha Pasada Cliente</span>
+                          <Input type="date" value={clientInvoiceDateFilter} onChange={(e) => setClientInvoiceDateFilter(e.target.value)} />
+                        </div>
+
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Estado Cliente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
+                            <SelectItem value="COBRADO">COBRADO</SelectItem>
+                            <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="text-base font-semibold mb-3">Filtros Terceros</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                         <Input 
+                          placeholder="Transporte" 
+                          value={thirdPartyTransportFilter} 
+                          onChange={(e) => setThirdPartyTransportFilter(e.target.value)} 
+                        />
+
+                        <Input 
+                          placeholder="N° Comp. Tercero" 
+                          value={thirdPartyInvoiceFilter} 
+                          onChange={(e) => setThirdPartyInvoiceFilter(e.target.value)} 
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">Fecha Comp. Tercero</span>
+                          <Input type="date" value={thirdPartyPaymentDateFilter} onChange={(e) => setThirdPartyPaymentDateFilter(e.target.value)} />
+                        </div>
+
+                        <Select value={thirdPartyPaymentStatusFilter} onValueChange={setThirdPartyPaymentStatusFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Estado Tercero" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="IMPAGO">IMPAGO</SelectItem>
+                            <SelectItem value="PAGADO">PAGADO</SelectItem>
+                            <SelectItem value="PARCIAL">PARCIAL</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4 flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => {
+                          setSearchTerm("")
+                          setClientFilter("all")
+                          setProductFilter("all")
+                          setOriginFilter("all")
+                          setDestinationFilter("all")
+                          setStatusFilter("all")
+                          setCategoryFilter("all")
+                          setClientInvoiceNumberFilter("")
+                          setClientInvoiceDateFilter("")
+                          setThirdPartyTransportFilter("")
+                          setThirdPartyInvoiceFilter("")
+                          setThirdPartyPaymentDateFilter("")
+                          setThirdPartyPaymentStatusFilter("all")
+                          setDateFrom("")
+                          setDateTo("")
+                        }}
+                      >
+                        Limpiar Filtros
+                      </Button>
+                    </div>
                   </div>
-
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Estado Cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="PENDIENTE">PENDIENTE</SelectItem>
-                      <SelectItem value="COBRADO">COBRADO</SelectItem>
-                      <SelectItem value="PARCIAL">PARCIAL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-medium mb-3">Filtros Terceros</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                   <Input 
-                    placeholder="Transporte" 
-                    value={thirdPartyTransportFilter} 
-                    onChange={(e) => setThirdPartyTransportFilter(e.target.value)} 
-                  />
-
-                  <Input 
-                    placeholder="N° Comp. Tercero" 
-                    value={thirdPartyInvoiceFilter} 
-                    onChange={(e) => setThirdPartyInvoiceFilter(e.target.value)} 
-                  />
-
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Fecha Comp. Tercero</span>
-                    <Input type="date" value={thirdPartyPaymentDateFilter} onChange={(e) => setThirdPartyPaymentDateFilter(e.target.value)} />
-                  </div>
-
-                  <Select value={thirdPartyPaymentStatusFilter} onValueChange={setThirdPartyPaymentStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Estado Tercero" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="IMPAGO">IMPAGO</SelectItem>
-                      <SelectItem value="PAGADO">PAGADO</SelectItem>
-                      <SelectItem value="PARCIAL">PARCIAL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Summary Cards */}
@@ -755,149 +941,152 @@ export default function L2TripsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Rubro</TableHead>
-                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={toggleSort}>
-                        <div className="flex items-center gap-1">
-                          Fecha
-                          {sortDirection === "asc" ? "↑" : "↓"}
-                        </div>
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={filteredTrips.length > 0 && selectedTrips.length === filteredTrips.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedTrips(filteredTrips.map((t) => t.id))
+                            else setSelectedTrips([])
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (sortField === "invoice_date") {
+                            setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+                          } else {
+                            setSortField("invoice_date")
+                            setSortDirection("desc")
+                          }
+                        }}
+                      >
+                        Fecha {sortField === "invoice_date" && (sortDirection === "asc" ? "↑" : "↓")}
                       </TableHead>
                       <TableHead>RTO</TableHead>
-                      <TableHead>Comp. Cliente</TableHead>
-                      <TableHead>F. Pasada</TableHead>
                       <TableHead>Cliente</TableHead>
-                      <TableHead>Producto</TableHead>
+                      <TableHead>Chofer</TableHead>
                       <TableHead>Origen</TableHead>
                       <TableHead>Destino</TableHead>
-                      <TableHead className="text-right">TN</TableHead>
-                      <TableHead className="text-right">$/Viaje</TableHead>
-                      <TableHead>Transporte</TableHead>
-                      <TableHead>Comp. 3ero</TableHead>
-                      <TableHead>F. Pago 3ero</TableHead>
-                      <TableHead>Est. Cliente</TableHead>
-                      <TableHead>Est. 3ero</TableHead>
+                      {(activeTab === "l2" || activeTab === "l2_billed" || activeTab === "l2_completed_all") && (
+                        <TableHead>Estado Cliente</TableHead>
+                      )}
+                      {(activeTab === "l2_billed") && (
+                         <TableHead>N° Factura</TableHead>
+                      )}
+                      {(activeTab === "l2_settled" || activeTab === "l2_completed_all") && (
+                        <TableHead>Estado Tercero</TableHead>
+                      )}
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentTrips.map((trip) => (
-                      <TableRow key={trip.id}>
-                        <TableCell>{trip.category}</TableCell>
-                        <TableCell>{formatLocalDate(trip.invoice_date)}</TableCell>
-                        <TableCell>{trip.invoice_number}</TableCell>
-                        <TableCell>{trip.client_invoice_number || "-"}</TableCell>
-                        <TableCell>{formatLocalDate(trip.client_invoice_date)}</TableCell>
-                        <TableCell>{trip.clients?.company}</TableCell>
-                        <TableCell>{trip.products?.name}</TableCell>
-                        <TableCell>{trip.origin}</TableCell>
-                        <TableCell>{trip.destination}</TableCell>
-                        <TableCell className="text-right">{trip.tons_delivered}</TableCell>
-                        <TableCell className="text-right">
-                          ${Number.parseFloat(trip.trip_amount || 0).toLocaleString("es-AR")}
-                        </TableCell>
-                        <TableCell>{trip.third_party_transport || "-"}</TableCell>
-                        <TableCell>{trip.third_party_invoice || "-"}</TableCell>
-                        <TableCell>{formatLocalDate(trip.third_party_payment_date)}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              trip.client_payment_status === "COBRADO"
-                                ? "bg-green-100 text-green-800"
-                                : trip.client_payment_status === "PARCIAL"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {trip.client_payment_status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              trip.third_party_payment_status === "PAGADO"
-                                ? "bg-green-100 text-green-800"
-                                : trip.third_party_payment_status === "PARCIAL"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {trip.third_party_payment_status || "IMPAGO"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button size="sm" variant="outline" onClick={() => exportTripPDF(trip)}>
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedTrip(trip)
-                                setDialogOpen(true)
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(trip.id)}>
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
+                    {filteredTrips.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          No hay viajes completados que coincidan con los filtros
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((trip) => (
+                        <TableRow key={trip.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedTrips.includes(trip.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) setSelectedTrips([...selectedTrips, trip.id])
+                                else setSelectedTrips(selectedTrips.filter((id) => id !== trip.id))
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>{formatLocalDate(trip.invoice_date)}</TableCell>
+                          <TableCell>{trip.invoice_number}</TableCell>
+                          <TableCell>
+                            <div>{trip.clients?.company}</div>
+                            <div className="text-xs text-muted-foreground">{trip.product}</div>
+                          </TableCell>
+                          <TableCell>{trip.drivers?.name}</TableCell>
+                          <TableCell>{trip.origin}</TableCell>
+                          <TableCell>{trip.destination}</TableCell>
+                          {(activeTab === "l2" || activeTab === "l2_billed" || activeTab === "l2_completed_all") && (
+                            <TableCell>
+                              <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                trip.client_payment_status === "COBRADO" ? "bg-green-100 text-green-800" :
+                                trip.client_payment_status === "PARCIAL" ? "bg-yellow-100 text-yellow-800" :
+                                "bg-gray-100 text-gray-800"
+                              }`}>
+                                {trip.client_payment_status || "PENDIENTE"}
+                              </div>
+                            </TableCell>
+                          )}
+                          {(activeTab === "l2_billed") && (
+                            <TableCell>{trip.client_invoice_number || "-"}</TableCell>
+                          )}
+                          {(activeTab === "l2_settled" || activeTab === "l2_completed_all") && (
+                            <TableCell>
+                              <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                trip.third_party_payment_status === "PAGADO" ? "bg-green-100 text-green-800" :
+                                trip.third_party_payment_status === "PARCIAL" ? "bg-yellow-100 text-yellow-800" :
+                                "bg-red-100 text-red-800"
+                              }`}>
+                                {trip.third_party_payment_status || "IMPAGO"}
+                              </div>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSelectedTrip(trip)
+                                  setDialogOpen(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(trip.id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
 
               {/* Pagination */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-4 border-t">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs sm:text-sm text-muted-foreground">Mostrar</span>
-                  <Select
-                    value={itemsPerPage.toString()}
-                    onValueChange={(value) => {
-                      setItemsPerPage(Number.parseInt(value))
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <SelectTrigger className="w-16 sm:w-20 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="text-xs sm:text-sm text-muted-foreground">de {filteredTrips.length}</span>
+              {filteredTrips.length > itemsPerPage && (
+                <div className="flex items-center justify-between px-4 py-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
+                    {Math.min(currentPage * itemsPerPage, filteredTrips.length)} de {filteredTrips.length} viajes
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.min(Math.ceil(filteredTrips.length / itemsPerPage), p + 1))}
+                      disabled={currentPage === Math.ceil(filteredTrips.length / itemsPerPage)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-xs sm:text-sm">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              )}
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
 
         {/* Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -924,6 +1113,13 @@ export default function L2TripsPage() {
           </DialogContent>
         </Dialog>
       </div>
+      {/* Bulk Edit Dialog */}
+      <BulkEditDialog
+        open={bulkEditDialogOpen}
+        onOpenChange={setBulkEditDialogOpen}
+        selectedTripIds={selectedTrips}
+        onSuccess={handleBulkEditSuccess}
+      />
     </div>
   )
 }
