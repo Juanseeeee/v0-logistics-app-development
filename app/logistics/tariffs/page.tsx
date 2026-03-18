@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Edit, Trash2, AlertTriangle, ChevronLeft, Filter, X, Download } from "lucide-react"
+import { Plus, Edit, Trash2, AlertTriangle, ChevronLeft, Filter, X, Download, History } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { TariffForm } from "@/components/tariff-form"
@@ -224,7 +224,13 @@ export default function TariffsPage() {
             <p className="text-xs sm:text-sm text-muted-foreground">Gestión de tarifas para viajes línea 2</p>
           </div>
         </div>
-        <div className="sm:ml-auto flex items-center gap-2">
+        <div className="sm:ml-auto flex items-center gap-2 flex-wrap">
+          <Link href="/logistics/tariffs/history">
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <History className="mr-2 h-4 w-4" />
+              Historial de Tarifas
+            </Button>
+          </Link>
           <Button variant="outline" onClick={handleExportExcel} className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Exportar Excel

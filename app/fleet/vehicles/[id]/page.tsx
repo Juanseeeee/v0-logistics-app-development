@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MaintenanceForm } from "@/components/maintenance-form"
-import { MaintenanceList } from "@/components/maintenance-list"
 import { FuelRecordForm } from "@/components/fuel-record-form"
 import { FuelRecordList } from "@/components/fuel-record-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { VehicleMaintenanceClient } from "@/components/vehicle-maintenance-client"
 
 export default async function VehicleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,6 +37,16 @@ export default async function VehicleDetailPage({ params }: { params: Promise<{ 
     .select("*")
     .eq("vehicle_id", id)
     .order("next_service_date", { ascending: true })
+
+  const { data: drivers } = await supabase
+    .from("drivers")
+    .select("*")
+    .eq("active", true)
+
+  const { data: spareParts } = await supabase
+    .from("spare_parts")
+    .select("*")
+    .eq("active", true)
 
   // Calculate totals
   const maintenanceTotal = maintenances?.reduce((sum, m) => sum + (Number(m.cost) || 0), 0) || 0
@@ -181,12 +191,24 @@ export default async function VehicleDetailPage({ params }: { params: Promise<{ 
                   <CardTitle>Registrar Mantenimiento</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <MaintenanceForm vehicleId={id} currentKm={vehicle.kilometers} />
+                  <MaintenanceForm 
+                    vehicleId={id} 
+                    currentKm={vehicle.kilometers}
+                    vehicles={[vehicle]}
+                    drivers={drivers || []}
+                    spareParts={spareParts || []}
+                  />
                 </CardContent>
               </Card>
 
               <div>
-                <MaintenanceList maintenances={maintenances || []} />
+                <VehicleMaintenanceClient 
+                  maintenances={maintenances || []} 
+                  vehicleId={id}
+                  vehicles={[vehicle]}
+                  drivers={drivers || []}
+                  spareParts={spareParts || []}
+                />
               </div>
             </div>
           </TabsContent>

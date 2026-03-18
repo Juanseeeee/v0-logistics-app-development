@@ -7,6 +7,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MaintenanceForm } from "@/components/maintenance-form"
+import { MaintenanceList } from "@/components/maintenance-list"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +28,14 @@ export default function MaintenancePage() {
   const [vehicles, setVehicles] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [spareParts, setSpareParts] = useState<any[]>([])
+  const [maintenances, setMaintenances] = useState<any[]>([])
+  
+  // Filters for history
+  const [searchHistory, setSearchHistory] = useState("")
+  const [vehicleFilter, setVehicleFilter] = useState("all")
+  
   const [open, setOpen] = useState(false)
+  const [editingMaintenance, setEditingMaintenance] = useState<any>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -41,7 +52,7 @@ export default function MaintenancePage() {
 
       setUser(user)
 
-      const [alertsResponse, suggestionsResponse, vehiclesResponse, driversResponse, sparePartsResponse] =
+      const [alertsResponse, suggestionsResponse, vehiclesResponse, driversResponse, sparePartsResponse, maintenancesResponse] =
         await Promise.all([
           supabase.from("maintenance_alerts").select("*").order("urgency_level", { ascending: true }),
           supabase
@@ -56,6 +67,7 @@ export default function MaintenancePage() {
             .order("patent_chasis", { ascending: true }),
           supabase.from("drivers").select("id, name, cuit").order("name", { ascending: true }),
           supabase.from("spare_parts").select("*").order("name", { ascending: true }),
+          supabase.from("maintenances").select("*, vehicles(patent_chasis, vehicle_type)").order("date", { ascending: false })
         ])
 
       if (alertsResponse.data) {
@@ -69,6 +81,7 @@ export default function MaintenancePage() {
       if (vehiclesResponse.data) setVehicles(vehiclesResponse.data)
       if (driversResponse.data) setDrivers(driversResponse.data)
       if (sparePartsResponse.data) setSpareParts(sparePartsResponse.data)
+      if (maintenancesResponse.data) setMaintenances(maintenancesResponse.data)
     }
 
     checkUser()
@@ -78,7 +91,7 @@ export default function MaintenancePage() {
     setOpen(false)
     router.refresh()
 
-    const [alertsResponse, suggestionsResponse, sparePartsResponse, vehiclesResponse] = await Promise.all([
+    const [alertsResponse, suggestionsResponse, sparePartsResponse, vehiclesResponse, maintenancesResponse] = await Promise.all([
       supabase.from("maintenance_alerts").select("*").order("urgency_level", { ascending: true }),
       supabase
         .from("maintenance_suggestions")
@@ -91,6 +104,7 @@ export default function MaintenancePage() {
         .select("*")
         .eq("transport_company", "CRONOS SA")
         .order("patent_chasis", { ascending: true }),
+      supabase.from("maintenances").select("*, vehicles(patent_chasis, vehicle_type)").order("date", { ascending: false })
     ])
 
     if (alertsResponse.data && vehiclesResponse.data) {
@@ -102,6 +116,7 @@ export default function MaintenancePage() {
     }
     if (suggestionsResponse.data) setSuggestions(suggestionsResponse.data)
     if (sparePartsResponse.data) setSpareParts(sparePartsResponse.data)
+    if (maintenancesResponse.data) setMaintenances(maintenancesResponse.data)
   }
 
   const getUrgencyColor = (urgency: string) => {
@@ -125,6 +140,12 @@ export default function MaintenancePage() {
         return "PROGRAMADO"
     }
   }
+
+  const filteredMaintenances = maintenances.filter((m: any) => {
+    const matchesSearch = m.description?.toLowerCase().includes(searchHistory.toLowerCase()) || false
+    const matchesVehicle = vehicleFilter === "all" || m.vehicle_id === vehicleFilter
+    return matchesSearch && matchesVehicle
+  })
 
   if (!user) return null
 
@@ -186,20 +207,51 @@ export default function MaintenancePage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Edit Maintenance Dialog */}
+          <Dialog open={!!editingMaintenance} onOpenChange={(isOpen) => !isOpen && setEditingMaintenance(null)}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Mantenimiento</DialogTitle>
+                <DialogDescription>Actualizar la información de este registro</DialogDescription>
+              </DialogHeader>
+              {editingMaintenance && (
+                <MaintenanceForm
+                  key={editingMaintenance.id}
+                  maintenance={editingMaintenance}
+                  vehicleId={editingMaintenance.vehicle_id}
+                  vehicles={vehicles}
+                  drivers={drivers}
+                  spareParts={spareParts}
+                  onSuccess={() => {
+                    setEditingMaintenance(null)
+                    handleSuccess()
+                  }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-8 space-y-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Mantenimientos Programados</CardTitle>
-            <CardDescription>
-              Servicios que ya fueron programados y necesitan atención según fecha o kilometraje
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {alerts && alerts.length > 0 ? (
-              <div className="space-y-3">
+        <Tabs defaultValue="alerts" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="alerts">Alertas y Sugerencias</TabsTrigger>
+            <TabsTrigger value="history">Historial de Mantenimientos</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="alerts" className="space-y-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Mantenimientos Programados</CardTitle>
+                <CardDescription>
+                  Servicios que ya fueron programados y necesitan atención según fecha o kilometraje
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {alerts && alerts.length > 0 ? (
+                  <div className="space-y-3">
                 {alerts.map((alert: any) => (
                   <div key={alert.id} className={`p-4 rounded-lg border ${getUrgencyColor(alert.urgency_level)}`}>
                     <div className="flex items-start justify-between mb-2">
@@ -361,6 +413,52 @@ export default function MaintenancePage() {
             </CardContent>
           </Card>
         )}
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Historial y Programados</CardTitle>
+                <CardDescription>Filtra y visualiza los mantenimientos registrados o programados de la flota</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <Input
+                    placeholder="Buscar por descripción..."
+                    value={searchHistory}
+                    onChange={(e) => setSearchHistory(e.target.value)}
+                    className="sm:w-1/3"
+                  />
+                  <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+                    <SelectTrigger className="sm:w-1/4">
+                      <SelectValue placeholder="Filtrar por vehículo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los vehículos</SelectItem>
+                      {vehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.patent_chasis} ({v.vehicle_type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {filteredMaintenances.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No se encontraron mantenimientos con los filtros seleccionados.
+                  </div>
+                ) : (
+                  <MaintenanceList 
+                    maintenances={filteredMaintenances} 
+                    showVehicle={true} 
+                    onEdit={(maintenance) => setEditingMaintenance(maintenance)}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

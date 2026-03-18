@@ -17,9 +17,14 @@ interface Maintenance {
   next_service_date: string | null
   next_service_km: number | null
   created_at: string
+  vehicles?: {
+    patent_chasis: string
+    vehicle_type: string
+  } | null
+  completed?: boolean
 }
 
-export function MaintenanceList({ maintenances }: { maintenances: Maintenance[] }) {
+export function MaintenanceList({ maintenances, showVehicle = false, onEdit }: { maintenances: Maintenance[], showVehicle?: boolean, onEdit?: (maintenance: Maintenance) => void }) {
   const router = useRouter()
   const [deleting, setDeleting] = useState<string | null>(null)
 
@@ -59,8 +64,23 @@ export function MaintenanceList({ maintenances }: { maintenances: Maintenance[] 
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <CardTitle className="text-base">{maintenance.description}</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">{new Date(maintenance.date).toLocaleDateString()}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <CardTitle className="text-base">{maintenance.description}</CardTitle>
+                  {maintenance.completed === false && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400">Programado</Badge>
+                  )}
+                  {maintenance.completed === true && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400">Completado</Badge>
+                  )}
+                </div>
+                {showVehicle && maintenance.vehicles && (
+                  <p className="text-sm font-medium text-[#0038ae] mb-1">
+                    {maintenance.vehicles.patent_chasis} <span className="text-muted-foreground font-normal">({maintenance.vehicles.vehicle_type})</span>
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground mt-1">
+                  {maintenance.completed === false ? 'Fecha programada:' : 'Fecha:'} {new Date(maintenance.date).toLocaleDateString()}
+                </p>
               </div>
               {maintenance.cost && (
                 <Badge variant="secondary" className="ml-2">
@@ -97,6 +117,15 @@ export function MaintenanceList({ maintenances }: { maintenances: Maintenance[] 
 
             <div className="flex gap-2">
               <LinkPurchaseOrderDialog maintenanceId={maintenance.id} />
+              {onEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(maintenance)}
+                >
+                  Editar
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 size="sm"
