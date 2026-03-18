@@ -399,76 +399,303 @@ export default function L2TripsPage() {
     toast.success("Datos exportados exitosamente")
   }
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const doc = new jsPDF()
-    doc.text("Reporte de Viajes L2", 14, 15)
+    
+    // Helper to add logo
+    const addLogo = async () => {
+      try {
+        const response = await fetch("/logo.png")
+        if (response.ok) {
+          const blob = await response.blob()
+          const reader = new FileReader()
+          return new Promise<string>((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.readAsDataURL(blob)
+          })
+        }
+      } catch (e) {
+        console.error("Error loading logo", e)
+      }
+      return null
+    }
+
+    const logoData = await addLogo()
+    if (logoData) {
+      doc.addImage(logoData, "PNG", 14, 10, 30, 15) // Adjust size/position
+    }
+
+    // Determine report context
+    let reportTitle = "Reporte de Viajes L2"
+    let reportSubtitle = `Emisión: ${new Date().toLocaleDateString()}`
+    
+    // Filters text
+    let filtersText = []
+    if (dateFrom || dateTo) {
+      filtersText.push(`Periodo: ${dateFrom ? formatLocalDate(dateFrom) : "Inicio"} - ${dateTo ? formatLocalDate(dateTo) : "Actualidad"}`)
+    }
+    
+    // Specific logic per tab
+    let columns: string[] = []
+    let data: any[][] = []
+    let themeColor = [41, 128, 185] // Default Blue
+    
+    if (activeTab === "l2_settled") {
+      reportTitle = "Reporte de Liquidación"
+      themeColor = [211, 84, 0] // Orange
+      
+      if (thirdPartyTransportFilter) {
+        filtersText.push(`Transporte: ${thirdPartyTransportFilter}`)
+      } else if (drivers.find(d => d.id === drivers.find(drv => drv.name === searchTerm)?.id)) {
+         // Try to find driver in search term if filter is complex, but better to use specific filters if available
+      }
+
+      columns = ["Fecha", "N° Viaje", "Chofer / Transporte", "Origen", "Destino", "Neto", "Tarifa", "Total"]
+      
+      data = filteredTrips.map(trip => [
+        formatLocalDate(trip.date),
+        trip.trip_number,
+        trip.third_party_transport || trip.drivers?.name || "-",
+        trip.origin,
+        trip.destination,
+        trip.net_destination || trip.net_origin || "-",
+        `$${Number(trip.third_party_rate || 0).toLocaleString("es-AR")}`,
+        `$${Number(trip.third_party_amount || 0).toLocaleString("es-AR")}`
+      ])
+
+    } else if (activeTab === "l2_billed") {
+      reportTitle = "Reporte de Facturación"
+      themeColor = [39, 174, 96] // Green
+      
+      if (clientFilter && clientFilter !== "all") {
+        const clientName = clients.find(c => c.id === clientFilter)?.company
+        if (clientName) filtersText.push(`Cliente: ${clientName}`)
+      }
+
+      columns = ["Fecha", "N° Viaje", "Cliente", "Producto", "Origen", "Destino", "Neto", "Tarifa", "Total"]
+      
+      data = filteredTrips.map(trip => [
+        formatLocalDate(trip.date),
+        trip.trip_number,
+        trip.clients?.company || "-",
+        trip.products?.name || "-",
+        trip.origin,
+        trip.destination,
+        trip.net_destination || trip.net_origin || "-",
+        `$${Number(trip.tariff_rate || 0).toLocaleString("es-AR")}`,
+        `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`
+      ])
+
+    } else if (activeTab === "l2_completed_all") {
+      reportTitle = "Reporte de Viajes Completados"
+      themeColor = [142, 68, 173] // Purple
+
+      columns = ["Fecha", "N° Viaje", "Cliente", "Chofer", "Facturado", "Liquidado", "Margen"]
+      
+      data = filteredTrips.map(trip => {
+        const billed = Number(trip.trip_amount || 0)
+        const settled = Number(trip.third_party_amount || 0)
+        const margin = billed - settled
+        return [
+          formatLocalDate(trip.date),
+          trip.trip_number,
+          trip.clients?.company || "-",
+          trip.drivers?.name || trip.third_party_transport || "-",
+          `$${billed.toLocaleString("es-AR")}`,
+          `$${settled.toLocaleString("es-AR")}`,
+          `$${margin.toLocaleString("es-AR")}`
+        ]
+      })
+    } else {
+      // Default / Pending / All L2
+      columns = ["Fecha", "N° Viaje", "Cliente", "Chofer", "Origen", "Destino", "Monto", "Estado"]
+      data = filteredTrips.map(trip => [
+        formatLocalDate(trip.date),
+        trip.trip_number,
+        trip.clients?.company,
+        trip.drivers?.name || trip.third_party_transport,
+        trip.origin,
+        trip.destination,
+        `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`,
+        trip.client_payment_status
+      ])
+    }
+
+    // Header positioning
+    doc.setFontSize(18)
+    doc.setTextColor(40)
+    doc.text(reportTitle, 50, 20)
+    
     doc.setFontSize(10)
-    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString()}`, 14, 22)
-    doc.text(`Cantidad de viajes: ${filteredTrips.length}`, 14, 28)
+    doc.setTextColor(100)
+    doc.text(reportSubtitle, 50, 26)
     
-    // Add active tab info
-    let tabName = "Todos L2"
-    if (activeTab === "l2_billed") tabName = "Facturados"
-    else if (activeTab === "l2_settled") tabName = "Liquidados"
-    else if (activeTab === "l2_completed_all") tabName = "Completos"
-    else if (activeTab === "pending") tabName = "Pendientes"
-    
-    doc.text(`Filtro: ${tabName}`, 14, 34)
+    if (filtersText.length > 0) {
+      doc.text(filtersText.join(" | "), 14, 35)
+    }
 
-    const tableData = filteredTrips.map((trip) => [
-      formatLocalDate(trip.invoice_date),
-      trip.invoice_number,
-      trip.clients?.company,
-      trip.drivers?.name,
-      trip.origin,
-      trip.destination,
-      `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`,
-      trip.client_payment_status
-    ])
-
+    // Table
     ;(doc as any).autoTable({
-      head: [["Fecha", "RTO", "Cliente", "Chofer", "Origen", "Destino", "Monto", "Estado"]],
-      body: tableData,
-      startY: 40,
+      head: [columns],
+      body: data,
+      startY: filtersText.length > 0 ? 40 : 35,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: themeColor },
+      didDrawPage: (data: any) => {
+        // Footer
+        const pageSize = doc.internal.pageSize
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight()
+        doc.setFontSize(8)
+        doc.text(`Página ${data.pageCount}`, data.settings.margin.left, pageHeight - 10)
+      }
     })
     
-    // Add totals
-    const totalAmount = filteredTrips.reduce((sum, t) => sum + (Number.parseFloat(t.trip_amount) || 0), 0)
-    const totalTons = filteredTrips.reduce((sum, t) => sum + (Number.parseFloat(t.tons_delivered) || 0), 0)
-    
+    // Totals
     const finalY = (doc as any).lastAutoTable.finalY + 10
-    doc.text(`Total Monto: $${totalAmount.toLocaleString("es-AR")}`, 14, finalY)
-    doc.text(`Total TN: ${totalTons.toLocaleString("es-AR")}`, 14, finalY + 6)
+    doc.setFontSize(10)
+    doc.setTextColor(0)
+    
+    if (activeTab === "l2_settled") {
+      const totalSettled = filteredTrips.reduce((sum, t) => sum + (Number(t.third_party_amount) || 0), 0)
+      doc.text(`Total Liquidado: $${totalSettled.toLocaleString("es-AR")}`, 14, finalY)
+    } else if (activeTab === "l2_billed") {
+      const totalBilled = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
+      doc.text(`Total Facturado: $${totalBilled.toLocaleString("es-AR")}`, 14, finalY)
+    } else if (activeTab === "l2_completed_all") {
+      const totalBilled = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
+      const totalSettled = filteredTrips.reduce((sum, t) => sum + (Number(t.third_party_amount) || 0), 0)
+      const totalMargin = totalBilled - totalSettled
+      
+      doc.text(`Total Facturado: $${totalBilled.toLocaleString("es-AR")}`, 14, finalY)
+      doc.text(`Total Liquidado: $${totalSettled.toLocaleString("es-AR")}`, 14, finalY + 6)
+      doc.text(`Margen Total: $${totalMargin.toLocaleString("es-AR")}`, 14, finalY + 12)
+    } else {
+       const totalAmount = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
+       doc.text(`Total Monto: $${totalAmount.toLocaleString("es-AR")}`, 14, finalY)
+    }
 
-    doc.save(`reporte_viajes_l2_${tabName}_${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(`${reportTitle.replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`)
     toast.success("PDF generado exitosamente")
   }
 
-  const exportTripPDF = async (trip: any) => {
-    try {
-      const response = await fetch("/api/generate-l2-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trip }),
-      })
-
-      if (!response.ok) throw new Error("Error generating PDF")
-
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `viaje_l2_${trip.invoice_number || trip.id}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
-
-      toast.success("PDF generado exitosamente")
-    } catch (error) {
-      console.error("Error exporting PDF:", error)
-      toast.error("Error al generar el PDF")
+  const handleExportTripPDF = async (trip: any) => {
+    const doc = new jsPDF()
+    
+    // Add Logo
+    const addLogo = async () => {
+        try {
+          const response = await fetch("/logo.png")
+          if (response.ok) {
+            const blob = await response.blob()
+            const reader = new FileReader()
+            return new Promise<string>((resolve) => {
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.readAsDataURL(blob)
+            })
+          }
+        } catch (e) { console.error(e) }
+        return null
     }
+    const logoData = await addLogo()
+    if (logoData) doc.addImage(logoData, "PNG", 14, 10, 30, 15)
+
+    // Header
+    doc.setFontSize(18)
+    doc.text(`Detalle de Viaje L2 #${trip.trip_number}`, 50, 20)
+    doc.setFontSize(10)
+    doc.text(`Fecha: ${formatLocalDate(trip.date)}`, 50, 26)
+
+    let yPos = 40
+
+    // General Info
+    doc.setFontSize(12)
+    doc.setFillColor(230, 230, 230)
+    doc.rect(14, yPos - 5, 182, 8, "F")
+    doc.text("Información General", 16, yPos)
+    yPos += 10
+    
+    const generalData = [
+      ["Cliente:", trip.clients?.company || "-"],
+      ["Producto:", trip.products?.name || "-"],
+      ["Rubro:", trip.category || "-"],
+      ["Chofer:", trip.drivers?.name || "-"],
+      ["Transporte:", trip.third_party_transport || "-"],
+      ["Patente Chasis:", trip.chasis_patent || "-"],
+      ["Patente Semi:", trip.semi_patent || "-"]
+    ]
+    
+    ;(doc as any).autoTable({
+      body: generalData,
+      startY: yPos,
+      theme: 'plain',
+      styles: { cellPadding: 1, fontSize: 10 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } }
+    })
+    yPos = (doc as any).lastAutoTable.finalY + 10
+
+    // Carga y Descarga
+    doc.setFontSize(12)
+    doc.setFillColor(230, 230, 230)
+    doc.rect(14, yPos - 5, 182, 8, "F")
+    doc.text("Logística", 16, yPos)
+    yPos += 10
+
+    const logisticsData = [
+      ["Origen:", trip.origin || "-", "Destino:", trip.destination || "-"],
+      ["Empresa Origen:", trip.origin_company || "-", "Empresa Destino:", trip.destination_company || "-"],
+      ["Tara Origen:", trip.tare_origin || "-", "Tara Destino:", trip.tare_destination || "-"],
+      ["Bruto Origen:", trip.gross_weight || "-", "Bruto Destino:", trip.gross_destination || "-"],
+      ["Neto Origen:", trip.net_origin || "-", "Neto Destino:", trip.net_destination || "-"],
+      ["Diferencia:", trip.weight_difference || "-", "TN Descarga:", trip.tons_delivered || "-"]
+    ]
+
+    ;(doc as any).autoTable({
+      body: logisticsData,
+      startY: yPos,
+      theme: 'plain',
+      styles: { cellPadding: 1, fontSize: 10 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 }, 2: { fontStyle: 'bold', cellWidth: 30 } }
+    })
+    yPos = (doc as any).lastAutoTable.finalY + 10
+
+    // Facturación y Liquidación
+    doc.setFontSize(12)
+    doc.setFillColor(230, 230, 230)
+    doc.rect(14, yPos - 5, 182, 8, "F")
+    doc.text("Facturación y Liquidación", 16, yPos)
+    yPos += 10
+
+    const financeData = [
+      ["Facturación (Cliente)", "", "Liquidación (Tercero)", ""],
+      ["Tarifa:", `$${Number(trip.tariff_rate || 0).toLocaleString("es-AR")}`, "Tarifa Tercero:", `$${Number(trip.third_party_rate || 0).toLocaleString("es-AR")}`],
+      ["Total:", `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`, "Total:", `$${Number(trip.third_party_amount || 0).toLocaleString("es-AR")}`],
+      ["N° Factura:", trip.client_invoice_number || "-", "N° Factura:", trip.third_party_invoice || "-"],
+      ["Fecha Factura:", formatLocalDate(trip.client_invoice_date), "Fecha Pago:", formatLocalDate(trip.third_party_payment_date)],
+      ["Estado:", trip.client_payment_status || "-", "Estado:", trip.third_party_payment_status || "-"]
+    ]
+
+    ;(doc as any).autoTable({
+      body: financeData,
+      startY: yPos,
+      theme: 'plain',
+      styles: { cellPadding: 1, fontSize: 10 },
+      columnStyles: { 
+        0: { fontStyle: 'bold', cellWidth: 30 },
+        2: { fontStyle: 'bold', cellWidth: 30 }
+      },
+      didParseCell: (data: any) => {
+        if (data.row.index === 0) data.cell.styles.fontStyle = 'bold'
+      }
+    })
+    yPos = (doc as any).lastAutoTable.finalY + 10
+
+    // Margen
+    const margin = (Number(trip.trip_amount) || 0) - (Number(trip.third_party_amount) || 0)
+    doc.setFontSize(12)
+    doc.text(`Margen del Viaje: $${margin.toLocaleString("es-AR")}`, 14, yPos + 5)
+
+    doc.save(`viaje_l2_${trip.trip_number}.pdf`)
+    toast.success("PDF generado exitosamente")
   }
 
   const toggleSort = () => {
@@ -1035,6 +1262,9 @@ export default function L2TripsPage() {
                           )}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              <Button variant="ghost" size="icon" onClick={() => handleExportTripPDF(trip)}>
+                                <FileIcon className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"

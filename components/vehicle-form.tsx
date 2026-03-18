@@ -10,15 +10,27 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-export function VehicleForm() {
+interface VehicleFormProps {
+  initialData?: {
+    id: string
+    vehicle_type: string
+    patent_chasis: string
+    patent_semi: string | null
+    transport_company: string
+    kilometers: number
+  }
+  onSuccess?: () => void
+}
+
+export function VehicleForm({ initialData, onSuccess }: VehicleFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    vehicle_type: "",
-    patent_chasis: "",
-    patent_semi: "",
-    transport_company: "",
-    kilometers: 0,
+    vehicle_type: initialData?.vehicle_type || "",
+    patent_chasis: initialData?.patent_chasis || "",
+    patent_semi: initialData?.patent_semi || "",
+    transport_company: initialData?.transport_company || "",
+    kilometers: initialData?.kilometers || 0,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,24 +39,46 @@ export function VehicleForm() {
 
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("vehicles").insert([formData])
+      
+      if (initialData?.id) {
+        const { error } = await supabase
+          .from("vehicles")
+          .update(formData)
+          .eq("id", initialData.id)
+          
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from("vehicles").insert([formData])
+        if (error) throw error
+        
+        setFormData({
+          vehicle_type: "",
+          patent_chasis: "",
+          patent_semi: "",
+          transport_company: "",
+          kilometers: 0,
+        })
+      }
 
-      if (error) throw error
-
-      setFormData({
-        vehicle_type: "",
-        patent_chasis: "",
-        patent_semi: "",
-        transport_company: "",
-        kilometers: 0,
-      })
       router.refresh()
+      if (onSuccess) {
+        onSuccess()
+      }
     } catch (error) {
       console.error("Error:", error)
-      alert("Error al agregar vehículo")
+      alert("Error al guardar vehículo")
     } finally {
       setLoading(false)
     }
+  }
+
+  const standardTypes = ["Semiremolque", "Cisterna", "Camioneta", "Camión", "Tractor", "Semi"]
+  const currentType = formData.vehicle_type
+  
+  // Ensure the current value is included in the options if it's not standard
+  const displayTypes = [...standardTypes]
+  if (currentType && !standardTypes.includes(currentType)) {
+    displayTypes.unshift(currentType)
   }
 
   return (
@@ -60,11 +94,11 @@ export function VehicleForm() {
             <SelectValue placeholder="Seleccionar tipo" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Semiremolque">Semiremolque</SelectItem>
-            <SelectItem value="Cisterna">Cisterna</SelectItem>
-            <SelectItem value="Camioneta">Camioneta</SelectItem>
-            <SelectItem value="Camión">Camión</SelectItem>
-            <SelectItem value="Tractor">Tractor</SelectItem>
+            {displayTypes.map((type) => (
+              <SelectItem key={type} value={type}>
+                {type}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -110,7 +144,7 @@ export function VehicleForm() {
       </div>
 
       <Button type="submit" className="w-full bg-[#0038ae] hover:bg-[#0038ae]/90" disabled={loading}>
-        {loading ? "Agregando..." : "Agregar Vehículo"}
+        {loading ? "Guardando..." : initialData ? "Actualizar Vehículo" : "Agregar Vehículo"}
       </Button>
     </form>
   )

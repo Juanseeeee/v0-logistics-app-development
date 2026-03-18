@@ -15,9 +15,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Pencil, Trash2, Eye } from "lucide-react"
+import { VehicleForm } from "./vehicle-form"
 
 interface Vehicle {
   id: string
@@ -32,7 +31,7 @@ interface Vehicle {
 export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
   const router = useRouter()
   const [updating, setUpdating] = useState<string | null>(null)
-  const [editingKm, setEditingKm] = useState<{ id: string; km: number } | null>(null)
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
 
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -53,26 +52,6 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
     } catch (error) {
       console.error("Error:", error)
       alert("Error al eliminar vehículo")
-    } finally {
-      setUpdating(null)
-    }
-  }
-
-  const handleUpdateKm = async () => {
-    if (!editingKm) return
-
-    setUpdating(editingKm.id)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.from("vehicles").update({ kilometers: editingKm.km }).eq("id", editingKm.id)
-
-      if (error) throw error
-
-      setEditingKm(null)
-      router.refresh()
-    } catch (error) {
-      console.error("Error:", error)
-      alert("Error al actualizar kilómetros")
     } finally {
       setUpdating(null)
     }
@@ -102,7 +81,7 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">
-          <Input
+          <input
             type="text"
             placeholder="Buscar por patente o empresa..."
             value={searchTerm}
@@ -110,6 +89,7 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
               setSearchTerm(e.target.value)
               setCurrentPage(1)
             }}
+            className="w-full px-4 py-2 border rounded-lg"
           />
         </div>
         <div className="flex gap-2">
@@ -165,47 +145,31 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
                 <TableCell className="text-right">{vehicle.kilometers.toLocaleString()} km</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Dialog>
+                    <Dialog open={editingVehicle?.id === vehicle.id} onOpenChange={(open) => !open && setEditingVehicle(null)}>
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
                           size="icon"
-                          onClick={() => setEditingKm({ id: vehicle.id, km: vehicle.kilometers })}
+                          onClick={() => setEditingVehicle(vehicle)}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Actualizar Kilómetros</DialogTitle>
+                          <DialogTitle>Editar Vehículo</DialogTitle>
                           <DialogDescription>
-                            Actualiza el kilometraje actual del vehículo {vehicle.patent_chasis}
+                            Actualiza los datos del vehículo {vehicle.patent_chasis}
                           </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-4 pt-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="new_km">Kilómetros</Label>
-                            <Input
-                              id="new_km"
-                              type="number"
-                              min="0"
-                              value={editingKm?.km || 0}
-                              onChange={(e) =>
-                                editingKm && setEditingKm({ ...editingKm, km: Number.parseInt(e.target.value) || 0 })
-                              }
-                            />
-                          </div>
-                          <Button
-                            onClick={handleUpdateKm}
-                            className="w-full bg-[#0038ae] hover:bg-[#0038ae]/90"
-                            disabled={updating === vehicle.id}
-                          >
-                            {updating === vehicle.id ? "Actualizando..." : "Actualizar"}
-                          </Button>
+                        <div className="pt-4">
+                          <VehicleForm 
+                            initialData={vehicle} 
+                            onSuccess={() => setEditingVehicle(null)} 
+                          />
                         </div>
-                      </DialogContent>
-                    </Dialog>
-
+                      </DialogContent></Dialog>
+                    
                     <Button asChild variant="outline" size="icon">
                       <Link href={`/fleet/vehicles/${vehicle.id}`} prefetch={false}>
                         <Eye className="h-4 w-4" />
@@ -213,10 +177,11 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
                     </Button>
 
                     <Button
-                      variant="destructive"
+                      variant="outline"
                       size="icon"
                       onClick={() => handleDelete(vehicle.id)}
                       disabled={updating === vehicle.id}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -229,54 +194,24 @@ export function VehicleList({ vehicles }: { vehicles: Vehicle[] }) {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t">
-          <div className="text-sm text-muted-foreground">
-            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredVehicles.length)} de {filteredVehicles.length}{" "}
-            vehículos
+        <div className="flex justify-center gap-2 mt-4">
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            Anterior
+          </Button>
+          <div className="flex items-center px-4">
+            Página {currentPage} de {totalPages}
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              Anterior
-            </Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum
-                if (totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
-                } else {
-                  pageNum = currentPage - 2 + i
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={currentPage === pageNum ? "bg-[#0038ae]" : ""}
-                  >
-                    {pageNum}
-                  </Button>
-                )
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              Siguiente
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Siguiente
+          </Button>
         </div>
       )}
     </div>
