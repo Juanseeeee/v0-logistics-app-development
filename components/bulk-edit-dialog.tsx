@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { L2Trip } from "@/types/l2-trip"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -89,7 +90,7 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
 
     try {
       // 1. Fetch original data for potential rollback
-      let originalData: any[] = []
+      let originalData: L2Trip[] = []
       const { data, error: fetchError } = await supabase
         .from("l2_trips")
         .select("*")
@@ -99,7 +100,7 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
       originalData = data || []
 
       // Prepare update object
-    const updateData: any = {
+    const updateData: Partial<L2Trip> = {
       updated_at: new Date().toISOString()
     }
 
