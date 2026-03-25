@@ -1,0 +1,57 @@
+[
+  {
+    "client_id": "f4c4dc22-eeb2-4e96-b899-a4dc518e1343",
+    "trip_amount": 768320,
+    "third_party_amount": 0,
+    "invoice_date": "2026-02-07",
+    "payment_date": null,
+    "tons_delivered": 28,
+    "clients": {
+      "company": "GBE"
+    }
+  },
+  {
+    "client_id": "f4c4dc22-eeb2-4e96-b899-a4dc518e1343",
+    "trip_amount": 501200,
+    "third_party_amount": 0,
+    "invoice_date": "2026-02-18",
+    "payment_date": null,
+    "tons_delivered": 28,
+    "clients": {
+      "company": "GBE"
+    }
+  },
+  {
+    "client_id": "f4c4dc22-eeb2-4e96-b899-a4dc518e1343",
+    "trip_amount": 2118460,
+    "third_party_amount": 0,
+    "invoice_date": "2026-02-05",
+    "payment_date": null,
+    "tons_delivered": 29.02,
+    "clients": {
+      "company": "GBE"
+    }
+  },
+  {
+    "client_id": "f4c4dc22-eeb2-4e96-b899-a4dc518e1343",
+    "trip_amount": 771064,
+    "third_party_amount": 0,
+    "invoice_date": "2026-02-02",
+    "payment_date": null,
+    "tons_delivered": 28.1,
+    "clients": {
+      "company": "GBE"
+    }
+  },
+  {
+    "client_id": "f4c4dc22-eeb2-4e96-b899-a4dc518e1343",
+    "trip_amount": 789174.4,
+    "third_party_amount": 0,
+    "invoice_date": "2026-02-03",
+    "payment_date": null,
+    "tons_delivered": 28.76,
+    "clients": {
+      "company": "GBE"
+    }
+  }
+]

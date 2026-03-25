@@ -52,6 +52,7 @@ export default function L2TripsPage() {
   const [thirdPartyInvoiceFilter, setThirdPartyInvoiceFilter] = useState("")
   const [thirdPartyPaymentDateFilter, setThirdPartyPaymentDateFilter] = useState("")
   const [thirdPartyPaymentStatusFilter, setThirdPartyPaymentStatusFilter] = useState("")
+  const [driverFilter, setDriverFilter] = useState("")
 
   const [sortField, setSortField] = useState<"date" | "invoice_date">("invoice_date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
@@ -297,6 +298,73 @@ export default function L2TripsPage() {
     sortDirection,
   ])
 
+  const filteredL1Trips = useMemo(() => {
+    let filtered = [...l1Trips]
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (trip) =>
+          trip.trip_number?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.product?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.loading_location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.unloading_location?.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (clientFilter && clientFilter !== "all") {
+      const client = clients.find((c) => c.id === clientFilter)
+      if (client?.company) {
+        filtered = filtered.filter((trip) => trip.client_name === client.company)
+      }
+    }
+
+    if (productFilter && productFilter !== "all") {
+      const product = products.find((p) => p.id === productFilter)
+      if (product?.name) {
+        filtered = filtered.filter((trip) => trip.product === product.name)
+      }
+    }
+
+    if (originFilter && originFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.loading_location === originFilter)
+    }
+
+    if (destinationFilter && destinationFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.unloading_location === destinationFilter)
+    }
+
+    if (driverFilter && driverFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.driver_id === driverFilter || trip.driver?.id === driverFilter)
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter((trip) => trip.date >= dateFrom)
+    }
+    if (dateTo) {
+      filtered = filtered.filter((trip) => trip.date <= dateTo)
+    }
+
+    return filtered
+  }, [
+    l1Trips,
+    searchTerm,
+    clientFilter,
+    productFilter,
+    originFilter,
+    destinationFilter,
+    driverFilter,
+    dateFrom,
+    dateTo,
+    clients,
+    products,
+  ])
+
+  useEffect(() => {
+    setCurrentL1Page(1)
+  }, [filteredL1Trips.length])
+
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1)
@@ -430,9 +498,9 @@ export default function L2TripsPage() {
   const endIndex = startIndex + itemsPerPage
   const currentTrips = filteredTrips.slice(startIndex, endIndex)
 
-  const totalL1Pages = Math.ceil(l1Trips.length / itemsPerPage)
+  const totalL1Pages = Math.ceil(filteredL1Trips.length / itemsPerPage)
   const l1StartIndex = (currentL1Page - 1) * itemsPerPage
-  const currentL1Trips = l1Trips.slice(l1StartIndex, l1StartIndex + itemsPerPage)
+  const currentL1Trips = filteredL1Trips.slice(l1StartIndex, l1StartIndex + itemsPerPage)
 
   // Calculate totals
   const totals = {
@@ -620,6 +688,134 @@ export default function L2TripsPage() {
               </p>
             </div>
 
+            {/* Filters for Pending */}
+            <div className="bg-card rounded-lg border p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por N° Viaje, Cliente, Origen, Destino, Chofer, Producto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filtros Avanzados
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[800px] p-6" align="end">
+                  <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+                    <div>
+                      <h3 className="text-base font-semibold mb-3">Filtros Generales</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={productFilter} onValueChange={setProductFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Producto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los productos</SelectItem>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="col-span-2 grid grid-cols-2 gap-2">
+                          <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                          <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                        </div>
+
+                        <Select value={originFilter} onValueChange={setOriginFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Origen (Carga)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los orígenes</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={destinationFilter} onValueChange={setDestinationFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Destino (Descarga)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los destinos</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="text-base font-semibold mb-3">Cliente y Chofer</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={clientFilter} onValueChange={setClientFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Cliente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los clientes</SelectItem>
+                            {clients.map((client) => (
+                              <SelectItem key={client.id} value={client.id}>
+                                {client.company}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={driverFilter} onValueChange={setDriverFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chofer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los choferes</SelectItem>
+                            {drivers.map((driver) => (
+                              <SelectItem key={driver.id} value={driver.id}>
+                                {driver.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => {
+                          setSearchTerm("")
+                          setClientFilter("all")
+                          setProductFilter("all")
+                          setOriginFilter("all")
+                          setDestinationFilter("all")
+                          setDriverFilter("all")
+                          setDateFrom("")
+                          setDateTo("")
+                        }}
+                      >
+                        Limpiar Filtros
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
             <div className="bg-card rounded-lg border overflow-hidden">
               <div className="overflow-x-auto">
                 <Table>
@@ -636,7 +832,7 @@ export default function L2TripsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {l1Trips.length === 0 ? (
+                    {filteredL1Trips.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           No hay viajes pendientes de completar
@@ -670,11 +866,11 @@ export default function L2TripsPage() {
               </div>
               
               {/* Pagination for L1 */}
-              {l1Trips.length > itemsPerPage && (
+              {filteredL1Trips.length > itemsPerPage && (
                 <div className="flex items-center justify-between px-4 py-4 border-t">
                   <div className="text-sm text-muted-foreground">
                     Mostrando {(currentL1Page - 1) * itemsPerPage + 1} a{" "}
-                    {Math.min(currentL1Page * itemsPerPage, l1Trips.length)} de {l1Trips.length} viajes
+                    {Math.min(currentL1Page * itemsPerPage, filteredL1Trips.length)} de {filteredL1Trips.length} viajes
                   </div>
                   <div className="flex gap-2">
                     <Button

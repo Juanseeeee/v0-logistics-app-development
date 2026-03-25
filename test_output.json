@@ -1,0 +1,27 @@
+{
+  "error": null,
+  "length": 1,
+  "sample": {
+    "id": "ec2c2173-e3e5-4288-9e91-1d6598001479",
+    "trip_number": 90,
+    "date": "2026-01-05",
+    "client_name": "BIOCORBA S.A",
+    "line": "L1",
+    "driver_id": "efb923cd-6668-493d-be0a-6d5d4530b5bc",
+    "product": "EFLUENTES",
+    "loading_location": "RAMALLO",
+    "unloading_location": "WORMS (ARROYO SECO)",
+    "transport_company": "DUPORT SRL",
+    "notes": null,
+    "created_at": "2026-01-12T14:29:36.841173+00:00",
+    "updated_at": "2026-01-12T14:29:36.841173+00:00",
+    "status": "completado_l1",
+    "unloading_lat": null,
+    "unloading_lng": null,
+    "unloading_address": "WORMS (ARROYO SECO)",
+    "completed_at": "2026-01-12T14:29:36.655",
+    "has_particularity": false,
+    "particularity_notes": null,
+    "particularity": null
+  }
+}

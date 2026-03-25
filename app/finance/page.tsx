@@ -159,8 +159,8 @@ export default async function FinancePage() {
                     />
                   </svg>
                 </div>
-                <CardTitle>Gastos</CardTitle>
-                <CardDescription>Control y registro de gastos</CardDescription>
+                <CardTitle>Estadísticas</CardTitle>
+                <CardDescription>Estadísticas y control de gastos</CardDescription>
               </CardHeader>
             </Card>
           </Link>

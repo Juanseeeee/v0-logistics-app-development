@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { NotificationBell } from "@/components/notification-bell"
 
 interface PageHeaderProps {
   title: string
@@ -25,6 +26,7 @@ export function PageHeader({ title, backHref = "/hub", backLabel = "← Volver",
           <h1 className="text-xl font-bold">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <ThemeToggle />
           {showLogout && (
             <form action="/auth/signout" method="post">

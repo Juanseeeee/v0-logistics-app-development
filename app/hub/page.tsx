@@ -5,6 +5,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { NotificationBell } from "@/components/notification-bell"
+import { HubDashboard } from "@/components/hub-dashboard"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -40,6 +42,7 @@ export default async function DashboardPage() {
             />
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <ThemeToggle />
             <form action="/auth/signout" method="post">
               <Button variant="ghost" type="submit" size="sm" className="text-xs sm:text-sm">
@@ -301,6 +304,14 @@ export default async function DashboardPage() {
             </Link>
           )}
         </div>
+        
+        {/* Dashboards and Charts */}
+        {(userRole === "admin" || userRole === "owner" || userRole === "manager") && (
+          <div className="mt-12">
+            <h3 className="text-2xl font-bold text-center mb-6">Métricas y Alertas Principales</h3>
+            <HubDashboard />
+          </div>
+        )}
       </div>
     </div>
   )
