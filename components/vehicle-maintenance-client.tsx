@@ -6,6 +6,8 @@ import { MaintenanceList } from "@/components/maintenance-list"
 import { MaintenanceForm } from "@/components/maintenance-form"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
+import { Maintenance } from "@/components/maintenance-list"
+
 export function VehicleMaintenanceClient({ 
   maintenances, 
   vehicleId, 
@@ -13,13 +15,13 @@ export function VehicleMaintenanceClient({
   drivers, 
   spareParts 
 }: { 
-  maintenances: any[], 
+  maintenances: Maintenance[], 
   vehicleId: string,
   vehicles: any[],
   drivers: any[], 
   spareParts: any[] 
 }) {
-  const [editingMaintenance, setEditingMaintenance] = useState<any>(null)
+  const [editingMaintenance, setEditingMaintenance] = useState<Maintenance | null>(null)
   const router = useRouter()
 
   return (

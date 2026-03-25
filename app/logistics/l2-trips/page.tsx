@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -17,22 +17,21 @@ import { BulkEditDialog } from "@/components/bulk-edit-dialog"
 import { Plus, Search, Download, Edit, Trash2, ChevronLeft, ChevronRight, ArrowRight, FileText, Banknote, ListChecks, Filter, X, FileSpreadsheet, FileIcon } from "lucide-react"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
-import jsPDF from "jspdf"
-import "jspdf-autotable"
+import { generateL2TripsListPDF, generateSingleL2TripPDF } from "@/lib/pdf/l2-trips-pdf"
+import { L2Trip, L1Trip, Client, Driver, Product, Location } from "@/types/l2-trip"
 
 export default function L2TripsPage() {
-  const [l2Trips, setL2Trips] = useState<any[]>([])
-  const [l1Trips, setL1Trips] = useState<any[]>([])
-  const [filteredTrips, setFilteredTrips] = useState<any[]>([])
-  const [clients, setClients] = useState<any[]>([])
-  const [drivers, setDrivers] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [l2Trips, setL2Trips] = useState<L2Trip[]>([])
+  const [l1Trips, setL1Trips] = useState<L1Trip[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false)
   const [bulkEditMode, setBulkEditMode] = useState<"full" | "billing" | "settlement">("full")
-  const [selectedTrip, setSelectedTrip] = useState<any>(null)
+  const [selectedTrip, setSelectedTrip] = useState<L2Trip | null>(null)
   const [activeTab, setActiveTab] = useState("l2")
   const [selectedTrips, setSelectedTrips] = useState<string[]>([])
 
@@ -53,6 +52,7 @@ export default function L2TripsPage() {
   const [thirdPartyInvoiceFilter, setThirdPartyInvoiceFilter] = useState("")
   const [thirdPartyPaymentDateFilter, setThirdPartyPaymentDateFilter] = useState("")
   const [thirdPartyPaymentStatusFilter, setThirdPartyPaymentStatusFilter] = useState("")
+  const [driverFilter, setDriverFilter] = useState("")
 
   const [sortField, setSortField] = useState<"date" | "invoice_date">("invoice_date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
@@ -60,30 +60,6 @@ export default function L2TripsPage() {
   useEffect(() => {
     loadData()
   }, [])
-
-  useEffect(() => {
-    applyFilters()
-  }, [
-    l2Trips,
-    searchTerm,
-    clientFilter,
-    statusFilter,
-    dateFrom,
-    dateTo,
-    originFilter,
-    destinationFilter,
-    productFilter,
-    categoryFilter,
-    clientInvoiceNumberFilter,
-    clientInvoiceDateFilter,
-    thirdPartyTransportFilter,
-    thirdPartyInvoiceFilter,
-    thirdPartyPaymentDateFilter,
-    thirdPartyPaymentStatusFilter,
-    activeTab,
-    sortField,
-    sortDirection,
-  ])
 
   const loadData = async () => {
     const supabase = createClient()
@@ -179,7 +155,7 @@ export default function L2TripsPage() {
     }
   }
 
-  const applyFilters = () => {
+  const filteredTrips = useMemo(() => {
     let filtered = [...l2Trips]
 
     // Search term
@@ -299,9 +275,100 @@ export default function L2TripsPage() {
       }
     })
 
-    setFilteredTrips(filtered)
+    return filtered
+  }, [
+    l2Trips,
+    searchTerm,
+    clientFilter,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    originFilter,
+    destinationFilter,
+    productFilter,
+    categoryFilter,
+    clientInvoiceNumberFilter,
+    clientInvoiceDateFilter,
+    thirdPartyTransportFilter,
+    thirdPartyInvoiceFilter,
+    thirdPartyPaymentDateFilter,
+    thirdPartyPaymentStatusFilter,
+    activeTab,
+    sortField,
+    sortDirection,
+  ])
+
+  const filteredL1Trips = useMemo(() => {
+    let filtered = [...l1Trips]
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (trip) =>
+          trip.trip_number?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.product?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.loading_location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.unloading_location?.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (clientFilter && clientFilter !== "all") {
+      const client = clients.find((c) => c.id === clientFilter)
+      if (client?.company) {
+        filtered = filtered.filter((trip) => trip.client_name === client.company)
+      }
+    }
+
+    if (productFilter && productFilter !== "all") {
+      const product = products.find((p) => p.id === productFilter)
+      if (product?.name) {
+        filtered = filtered.filter((trip) => trip.product === product.name)
+      }
+    }
+
+    if (originFilter && originFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.loading_location === originFilter)
+    }
+
+    if (destinationFilter && destinationFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.unloading_location === destinationFilter)
+    }
+
+    if (driverFilter && driverFilter !== "all") {
+      filtered = filtered.filter((trip) => trip.driver_id === driverFilter || trip.driver?.id === driverFilter)
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter((trip) => trip.date >= dateFrom)
+    }
+    if (dateTo) {
+      filtered = filtered.filter((trip) => trip.date <= dateTo)
+    }
+
+    return filtered
+  }, [
+    l1Trips,
+    searchTerm,
+    clientFilter,
+    productFilter,
+    originFilter,
+    destinationFilter,
+    driverFilter,
+    dateFrom,
+    dateTo,
+    clients,
+    products,
+  ])
+
+  useEffect(() => {
+    setCurrentL1Page(1)
+  }, [filteredL1Trips.length])
+
+  // Reset pagination when filters change
+  useEffect(() => {
     setCurrentPage(1)
-  }
+  }, [filteredTrips.length])
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Está seguro de eliminar este viaje L2?")) return
@@ -400,301 +467,20 @@ export default function L2TripsPage() {
   }
 
   const handleExportPDF = async () => {
-    const doc = new jsPDF()
-    
-    // Helper to add logo
-    const addLogo = async () => {
-      try {
-        const response = await fetch("/logo.png")
-        if (response.ok) {
-          const blob = await response.blob()
-          const reader = new FileReader()
-          return new Promise<string>((resolve) => {
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.readAsDataURL(blob)
-          })
-        }
-      } catch (e) {
-        console.error("Error loading logo", e)
-      }
-      return null
-    }
-
-    const logoData = await addLogo()
-    if (logoData) {
-      doc.addImage(logoData, "PNG", 14, 10, 30, 15) // Adjust size/position
-    }
-
-    // Determine report context
-    let reportTitle = "Reporte de Viajes L2"
-    let reportSubtitle = `Emisión: ${new Date().toLocaleDateString()}`
-    
-    // Filters text
-    let filtersText = []
-    if (dateFrom || dateTo) {
-      filtersText.push(`Periodo: ${dateFrom ? formatLocalDate(dateFrom) : "Inicio"} - ${dateTo ? formatLocalDate(dateTo) : "Actualidad"}`)
-    }
-    
-    // Specific logic per tab
-    let columns: string[] = []
-    let data: any[][] = []
-    let themeColor = [41, 128, 185] // Default Blue
-    
-    if (activeTab === "l2_settled") {
-      reportTitle = "Reporte de Liquidación"
-      themeColor = [211, 84, 0] // Orange
-      
-      if (thirdPartyTransportFilter) {
-        filtersText.push(`Transporte: ${thirdPartyTransportFilter}`)
-      } else if (drivers.find(d => d.id === drivers.find(drv => drv.name === searchTerm)?.id)) {
-         // Try to find driver in search term if filter is complex, but better to use specific filters if available
-      }
-
-      columns = ["Fecha", "N° Viaje", "Chofer / Transporte", "Origen", "Destino", "Neto", "Tarifa", "Total"]
-      
-      data = filteredTrips.map(trip => [
-        formatLocalDate(trip.date),
-        trip.trip_number,
-        trip.third_party_transport || trip.drivers?.name || "-",
-        trip.origin,
-        trip.destination,
-        trip.net_destination || trip.net_origin || "-",
-        `$${Number(trip.third_party_rate || 0).toLocaleString("es-AR")}`,
-        `$${Number(trip.third_party_amount || 0).toLocaleString("es-AR")}`
-      ])
-
-    } else if (activeTab === "l2_billed") {
-      reportTitle = "Reporte de Facturación"
-      themeColor = [39, 174, 96] // Green
-      
-      if (clientFilter && clientFilter !== "all") {
-        const clientName = clients.find(c => c.id === clientFilter)?.company
-        if (clientName) filtersText.push(`Cliente: ${clientName}`)
-      }
-
-      columns = ["Fecha", "N° Viaje", "Cliente", "Producto", "Origen", "Destino", "Neto", "Tarifa", "Total"]
-      
-      data = filteredTrips.map(trip => [
-        formatLocalDate(trip.date),
-        trip.trip_number,
-        trip.clients?.company || "-",
-        trip.products?.name || "-",
-        trip.origin,
-        trip.destination,
-        trip.net_destination || trip.net_origin || "-",
-        `$${Number(trip.tariff_rate || 0).toLocaleString("es-AR")}`,
-        `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`
-      ])
-
-    } else if (activeTab === "l2_completed_all") {
-      reportTitle = "Reporte de Viajes Completados"
-      themeColor = [142, 68, 173] // Purple
-
-      columns = ["Fecha", "N° Viaje", "Cliente", "Chofer", "Facturado", "Liquidado", "Margen"]
-      
-      data = filteredTrips.map(trip => {
-        const billed = Number(trip.trip_amount || 0)
-        const settled = Number(trip.third_party_amount || 0)
-        const margin = billed - settled
-        return [
-          formatLocalDate(trip.date),
-          trip.trip_number,
-          trip.clients?.company || "-",
-          trip.drivers?.name || trip.third_party_transport || "-",
-          `$${billed.toLocaleString("es-AR")}`,
-          `$${settled.toLocaleString("es-AR")}`,
-          `$${margin.toLocaleString("es-AR")}`
-        ]
-      })
-    } else {
-      // Default / Pending / All L2
-      columns = ["Fecha", "N° Viaje", "Cliente", "Chofer", "Origen", "Destino", "Monto", "Estado"]
-      data = filteredTrips.map(trip => [
-        formatLocalDate(trip.date),
-        trip.trip_number,
-        trip.clients?.company,
-        trip.drivers?.name || trip.third_party_transport,
-        trip.origin,
-        trip.destination,
-        `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`,
-        trip.client_payment_status
-      ])
-    }
-
-    // Header positioning
-    doc.setFontSize(18)
-    doc.setTextColor(40)
-    doc.text(reportTitle, 50, 20)
-    
-    doc.setFontSize(10)
-    doc.setTextColor(100)
-    doc.text(reportSubtitle, 50, 26)
-    
-    if (filtersText.length > 0) {
-      doc.text(filtersText.join(" | "), 14, 35)
-    }
-
-    // Table
-    ;(doc as any).autoTable({
-      head: [columns],
-      body: data,
-      startY: filtersText.length > 0 ? 40 : 35,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: themeColor },
-      didDrawPage: (data: any) => {
-        // Footer
-        const pageSize = doc.internal.pageSize
-        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight()
-        doc.setFontSize(8)
-        doc.text(`Página ${data.pageCount}`, data.settings.margin.left, pageHeight - 10)
-      }
+    await generateL2TripsListPDF({
+      filteredTrips,
+      activeTab,
+      dateFrom,
+      dateTo,
+      clientFilter,
+      thirdPartyTransportFilter,
+      clients
     })
-    
-    // Totals
-    const finalY = (doc as any).lastAutoTable.finalY + 10
-    doc.setFontSize(10)
-    doc.setTextColor(0)
-    
-    if (activeTab === "l2_settled") {
-      const totalSettled = filteredTrips.reduce((sum, t) => sum + (Number(t.third_party_amount) || 0), 0)
-      doc.text(`Total Liquidado: $${totalSettled.toLocaleString("es-AR")}`, 14, finalY)
-    } else if (activeTab === "l2_billed") {
-      const totalBilled = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
-      doc.text(`Total Facturado: $${totalBilled.toLocaleString("es-AR")}`, 14, finalY)
-    } else if (activeTab === "l2_completed_all") {
-      const totalBilled = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
-      const totalSettled = filteredTrips.reduce((sum, t) => sum + (Number(t.third_party_amount) || 0), 0)
-      const totalMargin = totalBilled - totalSettled
-      
-      doc.text(`Total Facturado: $${totalBilled.toLocaleString("es-AR")}`, 14, finalY)
-      doc.text(`Total Liquidado: $${totalSettled.toLocaleString("es-AR")}`, 14, finalY + 6)
-      doc.text(`Margen Total: $${totalMargin.toLocaleString("es-AR")}`, 14, finalY + 12)
-    } else {
-       const totalAmount = filteredTrips.reduce((sum, t) => sum + (Number(t.trip_amount) || 0), 0)
-       doc.text(`Total Monto: $${totalAmount.toLocaleString("es-AR")}`, 14, finalY)
-    }
-
-    doc.save(`${reportTitle.replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`)
     toast.success("PDF generado exitosamente")
   }
 
-  const handleExportTripPDF = async (trip: any) => {
-    const doc = new jsPDF()
-    
-    // Add Logo
-    const addLogo = async () => {
-        try {
-          const response = await fetch("/logo.png")
-          if (response.ok) {
-            const blob = await response.blob()
-            const reader = new FileReader()
-            return new Promise<string>((resolve) => {
-              reader.onloadend = () => resolve(reader.result as string)
-              reader.readAsDataURL(blob)
-            })
-          }
-        } catch (e) { console.error(e) }
-        return null
-    }
-    const logoData = await addLogo()
-    if (logoData) doc.addImage(logoData, "PNG", 14, 10, 30, 15)
-
-    // Header
-    doc.setFontSize(18)
-    doc.text(`Detalle de Viaje L2 #${trip.trip_number}`, 50, 20)
-    doc.setFontSize(10)
-    doc.text(`Fecha: ${formatLocalDate(trip.date)}`, 50, 26)
-
-    let yPos = 40
-
-    // General Info
-    doc.setFontSize(12)
-    doc.setFillColor(230, 230, 230)
-    doc.rect(14, yPos - 5, 182, 8, "F")
-    doc.text("Información General", 16, yPos)
-    yPos += 10
-    
-    const generalData = [
-      ["Cliente:", trip.clients?.company || "-"],
-      ["Producto:", trip.products?.name || "-"],
-      ["Rubro:", trip.category || "-"],
-      ["Chofer:", trip.drivers?.name || "-"],
-      ["Transporte:", trip.third_party_transport || "-"],
-      ["Patente Chasis:", trip.chasis_patent || "-"],
-      ["Patente Semi:", trip.semi_patent || "-"]
-    ]
-    
-    ;(doc as any).autoTable({
-      body: generalData,
-      startY: yPos,
-      theme: 'plain',
-      styles: { cellPadding: 1, fontSize: 10 },
-      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } }
-    })
-    yPos = (doc as any).lastAutoTable.finalY + 10
-
-    // Carga y Descarga
-    doc.setFontSize(12)
-    doc.setFillColor(230, 230, 230)
-    doc.rect(14, yPos - 5, 182, 8, "F")
-    doc.text("Logística", 16, yPos)
-    yPos += 10
-
-    const logisticsData = [
-      ["Origen:", trip.origin || "-", "Destino:", trip.destination || "-"],
-      ["Empresa Origen:", trip.origin_company || "-", "Empresa Destino:", trip.destination_company || "-"],
-      ["Tara Origen:", trip.tare_origin || "-", "Tara Destino:", trip.tare_destination || "-"],
-      ["Bruto Origen:", trip.gross_weight || "-", "Bruto Destino:", trip.gross_destination || "-"],
-      ["Neto Origen:", trip.net_origin || "-", "Neto Destino:", trip.net_destination || "-"],
-      ["Diferencia:", trip.weight_difference || "-", "TN Descarga:", trip.tons_delivered || "-"]
-    ]
-
-    ;(doc as any).autoTable({
-      body: logisticsData,
-      startY: yPos,
-      theme: 'plain',
-      styles: { cellPadding: 1, fontSize: 10 },
-      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 }, 2: { fontStyle: 'bold', cellWidth: 30 } }
-    })
-    yPos = (doc as any).lastAutoTable.finalY + 10
-
-    // Facturación y Liquidación
-    doc.setFontSize(12)
-    doc.setFillColor(230, 230, 230)
-    doc.rect(14, yPos - 5, 182, 8, "F")
-    doc.text("Facturación y Liquidación", 16, yPos)
-    yPos += 10
-
-    const financeData = [
-      ["Facturación (Cliente)", "", "Liquidación (Tercero)", ""],
-      ["Tarifa:", `$${Number(trip.tariff_rate || 0).toLocaleString("es-AR")}`, "Tarifa Tercero:", `$${Number(trip.third_party_rate || 0).toLocaleString("es-AR")}`],
-      ["Total:", `$${Number(trip.trip_amount || 0).toLocaleString("es-AR")}`, "Total:", `$${Number(trip.third_party_amount || 0).toLocaleString("es-AR")}`],
-      ["N° Factura:", trip.client_invoice_number || "-", "N° Factura:", trip.third_party_invoice || "-"],
-      ["Fecha Factura:", formatLocalDate(trip.client_invoice_date), "Fecha Pago:", formatLocalDate(trip.third_party_payment_date)],
-      ["Estado:", trip.client_payment_status || "-", "Estado:", trip.third_party_payment_status || "-"]
-    ]
-
-    ;(doc as any).autoTable({
-      body: financeData,
-      startY: yPos,
-      theme: 'plain',
-      styles: { cellPadding: 1, fontSize: 10 },
-      columnStyles: { 
-        0: { fontStyle: 'bold', cellWidth: 30 },
-        2: { fontStyle: 'bold', cellWidth: 30 }
-      },
-      didParseCell: (data: any) => {
-        if (data.row.index === 0) data.cell.styles.fontStyle = 'bold'
-      }
-    })
-    yPos = (doc as any).lastAutoTable.finalY + 10
-
-    // Margen
-    const margin = (Number(trip.trip_amount) || 0) - (Number(trip.third_party_amount) || 0)
-    doc.setFontSize(12)
-    doc.text(`Margen del Viaje: $${margin.toLocaleString("es-AR")}`, 14, yPos + 5)
-
-    doc.save(`viaje_l2_${trip.trip_number}.pdf`)
+  const handleExportTripPDF = async (trip: L2Trip) => {
+    await generateSingleL2TripPDF(trip)
     toast.success("PDF generado exitosamente")
   }
 
@@ -704,12 +490,17 @@ export default function L2TripsPage() {
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
+  const [currentL1Page, setCurrentL1Page] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
 
   const totalPages = Math.ceil(filteredTrips.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const currentTrips = filteredTrips.slice(startIndex, endIndex)
+
+  const totalL1Pages = Math.ceil(filteredL1Trips.length / itemsPerPage)
+  const l1StartIndex = (currentL1Page - 1) * itemsPerPage
+  const currentL1Trips = filteredL1Trips.slice(l1StartIndex, l1StartIndex + itemsPerPage)
 
   // Calculate totals
   const totals = {
@@ -733,7 +524,7 @@ export default function L2TripsPage() {
     setSelectedTrips([])
   }
 
-  const promoteToL2 = async (l1Trip: any) => {
+  const promoteToL2 = async (l1Trip: L1Trip) => {
     try {
       const supabase = createClient()
 
@@ -897,6 +688,134 @@ export default function L2TripsPage() {
               </p>
             </div>
 
+            {/* Filters for Pending */}
+            <div className="bg-card rounded-lg border p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por N° Viaje, Cliente, Origen, Destino, Chofer, Producto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filtros Avanzados
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[800px] p-6" align="end">
+                  <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+                    <div>
+                      <h3 className="text-base font-semibold mb-3">Filtros Generales</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={productFilter} onValueChange={setProductFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Producto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los productos</SelectItem>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="col-span-2 grid grid-cols-2 gap-2">
+                          <Input type="date" placeholder="Desde" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                          <Input type="date" placeholder="Hasta" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                        </div>
+
+                        <Select value={originFilter} onValueChange={setOriginFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Origen (Carga)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los orígenes</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={destinationFilter} onValueChange={setDestinationFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Destino (Descarga)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los destinos</SelectItem>
+                            {locations.map((location) => (
+                              <SelectItem key={location.id} value={location.name}>
+                                {location.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="text-base font-semibold mb-3">Cliente y Chofer</h3>
+                      <div className="grid grid-cols-4 gap-4">
+                        <Select value={clientFilter} onValueChange={setClientFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Cliente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los clientes</SelectItem>
+                            {clients.map((client) => (
+                              <SelectItem key={client.id} value={client.id}>
+                                {client.company}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={driverFilter} onValueChange={setDriverFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Chofer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los choferes</SelectItem>
+                            {drivers.map((driver) => (
+                              <SelectItem key={driver.id} value={driver.id}>
+                                {driver.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => {
+                          setSearchTerm("")
+                          setClientFilter("all")
+                          setProductFilter("all")
+                          setOriginFilter("all")
+                          setDestinationFilter("all")
+                          setDriverFilter("all")
+                          setDateFrom("")
+                          setDateTo("")
+                        }}
+                      >
+                        Limpiar Filtros
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
             <div className="bg-card rounded-lg border overflow-hidden">
               <div className="overflow-x-auto">
                 <Table>
@@ -913,14 +832,14 @@ export default function L2TripsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {l1Trips.length === 0 ? (
+                    {filteredL1Trips.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           No hay viajes pendientes de completar
                         </TableCell>
                       </TableRow>
                     ) : (
-                      l1Trips.map((trip) => (
+                      currentL1Trips.map((trip) => (
                         <TableRow key={trip.id}>
                           <TableCell className="font-medium">{trip.trip_number}</TableCell>
                           <TableCell>{formatLocalDate(trip.date)}</TableCell>
@@ -945,6 +864,34 @@ export default function L2TripsPage() {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Pagination for L1 */}
+              {filteredL1Trips.length > itemsPerPage && (
+                <div className="flex items-center justify-between px-4 py-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {(currentL1Page - 1) * itemsPerPage + 1} a{" "}
+                    {Math.min(currentL1Page * itemsPerPage, filteredL1Trips.length)} de {filteredL1Trips.length} viajes
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentL1Page((p) => Math.max(1, p - 1))}
+                      disabled={currentL1Page === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentL1Page((p) => Math.min(totalL1Pages, p + 1))}
+                      disabled={currentL1Page === totalL1Pages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

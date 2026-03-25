@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { LinkPurchaseOrderDialog } from "@/components/maintenance/link-purchase-order-dialog"
 
-interface Maintenance {
+export interface Maintenance {
   id: string
   description: string
   cost: number | null

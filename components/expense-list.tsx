@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { canEditFinance } from "@/lib/auth/roles"
 import { createClient } from "@/lib/supabase/client"
+import { ExpenseCharts } from "@/components/expense-charts"
 
 interface Expense {
   id: string
@@ -31,6 +32,8 @@ interface Expense {
   invoice_number: string | null
   status: string
   notes: string | null
+  source?: string
+  is_income?: boolean
 }
 
 interface Supplier {
@@ -40,19 +43,21 @@ interface Supplier {
 
 export function ExpenseList({
   expenses,
-  suppliers,
+  l2Trips,
+  suppliers = [],
   userRole,
 }: {
   expenses: Expense[]
-  suppliers: Supplier[]
+  l2Trips?: any[]
+  suppliers?: Supplier[]
   userRole: string | null
 }) {
   const router = useRouter()
   const [showDialog, setShowDialog] = useState(false)
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("maintenance")
-  const [statusFilter, setStatusFilter] = useState("pending")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
@@ -75,7 +80,7 @@ export function ExpenseList({
       searchTerm === "" ||
       expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      expense.suppliers?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      expense.suppliers?.name?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter
     const matchesStatus = statusFilter === "all" || expense.status === statusFilter
@@ -88,10 +93,10 @@ export function ExpenseList({
   })
 
   // Calculate statistics
-  const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const paidExpenses = filteredExpenses.filter((e) => e.status === "paid").reduce((sum, e) => sum + e.amount, 0)
-  const pendingExpenses = filteredExpenses.filter((e) => e.status === "pending").reduce((sum, e) => sum + e.amount, 0)
-
+  const totalIncome = filteredExpenses.filter((e) => e.is_income).reduce((sum, expense) => sum + expense.amount, 0)
+  const totalExpenses = filteredExpenses.filter((e) => !e.is_income).reduce((sum, expense) => sum + expense.amount, 0)
+  const balance = totalIncome - totalExpenses
+  
   const categories = Array.from(new Set(expenses.map((e) => e.category))).sort()
 
   return (
@@ -105,12 +110,12 @@ export function ExpenseList({
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Registrar Gasto
+                Registrar Gasto Manual
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingExpense ? "Editar Gasto" : "Nuevo Gasto"}</DialogTitle>
+                <DialogTitle>{editingExpense ? "Editar Gasto" : "Nuevo Gasto Manual"}</DialogTitle>
               </DialogHeader>
               <ExpenseForm expense={editingExpense} suppliers={suppliers} onSuccess={handleSuccess} />
             </DialogContent>
@@ -118,54 +123,60 @@ export function ExpenseList({
         </div>
       )}
 
-      {/* Statistics */}
+      {/* Statistics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Total de Gastos</CardDescription>
-            <CardTitle className="text-3xl">${totalExpenses.toLocaleString("es-AR")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{filteredExpenses.length} registros</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Pagados</CardDescription>
-            <CardTitle className="text-3xl text-green-600">${paidExpenses.toLocaleString("es-AR")}</CardTitle>
+            <CardDescription>Total Ingresos</CardDescription>
+            <CardTitle className="text-3xl text-green-600">${totalIncome.toLocaleString("es-AR")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              {filteredExpenses.filter((e) => e.status === "paid").length} gastos
+              {filteredExpenses.filter((e) => e.is_income).length} registros
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Pendientes</CardDescription>
-            <CardTitle className="text-3xl text-orange-600">${pendingExpenses.toLocaleString("es-AR")}</CardTitle>
+            <CardDescription>Total Egresos</CardDescription>
+            <CardTitle className="text-3xl text-red-600">${totalExpenses.toLocaleString("es-AR")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              {filteredExpenses.filter((e) => e.status === "pending").length} gastos
+              {filteredExpenses.filter((e) => !e.is_income).length} registros
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Promedio</CardDescription>
-            <CardTitle className="text-3xl">
-              ${filteredExpenses.length > 0 ? (totalExpenses / filteredExpenses.length).toLocaleString("es-AR", { maximumFractionDigits: 0 }) : 0}
+            <CardDescription>Balance General</CardDescription>
+            <CardTitle className={`text-3xl ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+              ${Math.abs(balance).toLocaleString("es-AR")}
+              {balance < 0 && " (Pérdida)"}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Por gasto</p>
+            <p className="text-sm text-muted-foreground">Ingresos - Egresos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Movimientos</CardDescription>
+            <CardTitle className="text-3xl">{filteredExpenses.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">En el período seleccionado</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Detailed Charts */}
+      {(filteredExpenses.length > 0 || (l2Trips && l2Trips.length > 0)) && (
+        <ExpenseCharts expenses={filteredExpenses} l2Trips={l2Trips || []} />
+      )}
 
       {/* Filters */}
       <Card>
@@ -266,7 +277,9 @@ export function ExpenseList({
                       </TableCell>
                       <TableCell>{expense.description}</TableCell>
                       <TableCell>{expense.suppliers?.name || "-"}</TableCell>
-                      <TableCell className="text-right font-medium">${expense.amount.toLocaleString("es-AR")}</TableCell>
+                      <TableCell className={`text-right font-medium ${expense.is_income ? "text-green-600" : "text-red-600"}`}>
+                        {expense.is_income ? "+" : "-"}${expense.amount.toLocaleString("es-AR")}
+                      </TableCell>
                       <TableCell className="capitalize">{expense.payment_method}</TableCell>
                       <TableCell>{expense.invoice_number || "-"}</TableCell>
                       <TableCell>
@@ -284,9 +297,11 @@ export function ExpenseList({
                       </TableCell>
                       {canEdit && (
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(expense)}>
-                            Editar
-                          </Button>
+                          {!expense.source && (
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(expense)}>
+                              Editar
+                            </Button>
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
@@ -303,11 +318,11 @@ export function ExpenseList({
 
 function ExpenseForm({
   expense,
-  suppliers,
+  suppliers = [],
   onSuccess,
 }: {
   expense: Expense | null
-  suppliers: Supplier[]
+  suppliers?: Supplier[]
   onSuccess: () => void
 }) {
   const [loading, setLoading] = useState(false)
@@ -413,12 +428,12 @@ function ExpenseForm({
 
         <div>
           <Label htmlFor="supplier_id">Proveedor (opcional)</Label>
-          <Select value={formData.supplier_id} onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}>
+          <Select value={formData.supplier_id || "none"} onValueChange={(value) => setFormData({ ...formData, supplier_id: value === "none" ? "" : value })}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar proveedor" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Sin proveedor</SelectItem>
+              <SelectItem value="none">Sin proveedor</SelectItem>
               {suppliers.map((supplier) => (
                 <SelectItem key={supplier.id} value={supplier.id}>
                   {supplier.name}

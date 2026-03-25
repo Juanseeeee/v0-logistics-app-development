@@ -29,6 +29,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
   const [selectedClient, setSelectedClient] = useState(trip?.client_id || "")
   const [clientProducts, setClientProducts] = useState<any[]>([])
   const [tariffAlert, setTariffAlert] = useState<any>(null)
+  const [pendingTariff, setPendingTariff] = useState<any>(null)
   const [showQuickLocationDialog, setShowQuickLocationDialog] = useState(false)
   const [quickLocationType, setQuickLocationType] = useState<"origin" | "destination">("origin")
 
@@ -41,6 +42,8 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     // Si la diferencia es mayor a 0.005, asumimos que fue editado manualmente
     return Math.abs(delivered - calculated) > 0.005
   })
+  const [isManualTripAmount, setIsManualTripAmount] = useState(false)
+  const [isManualThirdPartyAmount, setIsManualThirdPartyAmount] = useState(false)
 
   const [formData, setFormData] = useState({
     trip_id: trip?.trip_id || trip?._l1Trip?.id || null, // Add trip_id to link with L1 trip
@@ -83,7 +86,6 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     notes: trip?.notes || "",
   })
 
-  // Load initial data
   useEffect(() => {
     loadLocations()
     loadTransportCompanies()
@@ -92,6 +94,21 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
       setSelectedClient(trip.client_id)
     }
   }, [])
+
+  // Ctrl+S shortcut to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault()
+        // Create a synthetic event or just call handleSubmit directly
+        // We need a dummy React.FormEvent, so we can cast a normal Event
+        handleSubmit({ preventDefault: () => {} } as any)
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [formData, isManualTons]) // dependencies needed for handleSubmit closure
 
   useEffect(() => {
     if (
@@ -128,9 +145,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
       formData.client_id &&
       formData.product_id &&
       formData.origin &&
-      formData.destination &&
-      formData.third_party_transport &&
-      !trip?._shouldLookupTariff // Only auto-lookup if not already triggered by promotion
+      formData.destination
     ) {
       lookupTariff()
     }
@@ -186,20 +201,25 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     }
 
     if (data && data.length > 0) {
-      const matchingTariffs = data.filter((tariff) => {
-        const clientMatch = !tariff.client_id || tariff.client_id === "ALL" || tariff.client_id === formData.client_id
-        const productMatch =
-          !tariff.product_id || tariff.product_id === "ALL" || tariff.product_id === formData.product_id
-        const originMatch = !tariff.origin || tariff.origin === "ALL" || tariff.origin === formData.origin
-        const destMatch =
-          !tariff.destination || tariff.destination === "ALL" || tariff.destination === formData.destination
+      const norm = (s: any) => (s ?? "").toString().trim().toLowerCase()
+      const matches = (tariff: any, originValue: string, destinationValue: string) => {
+        const clientMatch = !tariff.client_id || tariff.client_id === "ALL" || norm(tariff.client_id) === norm(formData.client_id)
+        const productMatch = !tariff.product_id || tariff.product_id === "ALL" || norm(tariff.product_id) === norm(formData.product_id)
+        const originMatch = !tariff.origin || tariff.origin === "ALL" || norm(tariff.origin) === norm(originValue)
+        const destMatch = !tariff.destination || tariff.destination === "ALL" || norm(tariff.destination) === norm(destinationValue)
         const transportMatch =
           !tariff.transport_company ||
           tariff.transport_company === "ALL" ||
-          tariff.transport_company === formData.third_party_transport
-
+          !formData.third_party_transport ||
+          norm(tariff.transport_company) === norm(formData.third_party_transport)
         return clientMatch && productMatch && originMatch && destMatch && transportMatch
-      })
+      }
+
+      let matchingTariffs = data.filter((tariff) => matches(tariff, formData.origin, formData.destination))
+
+      if (matchingTariffs.length === 0) {
+        matchingTariffs = data.filter((tariff) => matches(tariff, formData.destination, formData.origin))
+      }
 
       if (matchingTariffs.length > 0) {
         // Sort by specificity (more criteria matched = higher priority)
@@ -246,24 +266,12 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
           setTariffAlert(null)
         }
 
-        // Apply tariff - both own rate and third party rate
-        setFormData((prev) => {
-          const updates: any = {
-            ...prev,
-            tariff_rate: bestTariff.rate_per_ton || prev.tariff_rate,
-          }
-          // Apply third party rate from tariff if available
-          if (bestTariff.third_party_rate_per_ton) {
-            updates.third_party_rate = bestTariff.third_party_rate_per_ton
-          }
-          // Apply transport company from tariff if available and not already set
-          if (bestTariff.transport_company && bestTariff.transport_company !== "ALL" && !prev.third_party_transport) {
-            updates.third_party_transport = bestTariff.transport_company
-          }
-          return updates
+        setPendingTariff(bestTariff)
+        setTariffAlert({
+          type: "found",
+          message: "Se detectó una tarifa para estos parámetros",
+          tariff: bestTariff,
         })
-
-        toast.success("Tarifa encontrada y aplicada automáticamente")
       } else {
         setTariffAlert({
           type: "not_found",
@@ -276,6 +284,49 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
         message: "No se encontró una tarifa para estos criterios. Ingrese manualmente.",
       })
     }
+  }
+
+  const applyPendingTariff = () => {
+    if (!pendingTariff) return
+    const bestTariff = pendingTariff
+    setFormData((prev) => {
+      const updates: any = { ...prev }
+
+      if (bestTariff.rate_per_ton) {
+        updates.tariff_rate = bestTariff.rate_per_ton
+        if (prev.tons_delivered) {
+          const tons = Number.parseFloat(prev.tons_delivered)
+          if (!Number.isNaN(tons)) updates.trip_amount = (Number(bestTariff.rate_per_ton) * tons).toFixed(2)
+        }
+      }
+      if (bestTariff.rate_per_trip) {
+        updates.trip_amount = Number(bestTariff.rate_per_trip).toFixed(2)
+      }
+
+      if (bestTariff.third_party_rate_per_ton) {
+        updates.third_party_rate = bestTariff.third_party_rate_per_ton
+        if (prev.tons_delivered) {
+          const tons = Number.parseFloat(prev.tons_delivered)
+          if (!Number.isNaN(tons)) updates.third_party_amount = (Number(bestTariff.third_party_rate_per_ton) * tons).toFixed(2)
+        }
+      }
+      if (bestTariff.third_party_rate_per_trip) {
+        updates.third_party_amount = Number(bestTariff.third_party_rate_per_trip).toFixed(2)
+      }
+
+      if (bestTariff.transport_company && bestTariff.transport_company !== "ALL" && !prev.third_party_transport) {
+        updates.third_party_transport = bestTariff.transport_company
+      }
+      return updates
+    })
+    setTariffAlert(null)
+    setPendingTariff(null)
+    toast.success("Tarifa aplicada")
+  }
+
+  const dismissTariffAlert = () => {
+    setTariffAlert(null)
+    setPendingTariff(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -401,7 +452,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
   }, [formData.net_destination, isManualTons])
 
   useEffect(() => {
-    if (formData.tariff_rate && formData.tons_delivered) {
+    if (!isManualTripAmount && formData.tariff_rate && formData.tons_delivered) {
       const tons = Number.parseFloat(formData.tons_delivered)
       const amount = Number.parseFloat(formData.tariff_rate) * tons
       setFormData((prev) => ({
@@ -409,10 +460,10 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
         trip_amount: amount.toFixed(2),
       }))
     }
-  }, [formData.tariff_rate, formData.tons_delivered])
+  }, [formData.tariff_rate, formData.tons_delivered, isManualTripAmount])
 
   useEffect(() => {
-    if (formData.third_party_rate && formData.tons_delivered) {
+    if (!isManualThirdPartyAmount && formData.third_party_rate && formData.tons_delivered) {
       const tons = Number.parseFloat(formData.tons_delivered)
       const amount = Number.parseFloat(formData.third_party_rate) * tons
       setFormData((prev) => ({
@@ -420,7 +471,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
         third_party_amount: amount.toFixed(2),
       }))
     }
-  }, [formData.third_party_rate, formData.tons_delivered])
+  }, [formData.third_party_rate, formData.tons_delivered, isManualThirdPartyAmount])
 
   useEffect(() => {
     if (formData.driver_id) {
@@ -446,7 +497,9 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                 ? "bg-red-50 text-red-800 border border-red-200"
                 : tariffAlert.type === "expiring"
                   ? "bg-yellow-50 text-yellow-800 border border-yellow-200"
-                  : "bg-blue-50 text-blue-800 border border-blue-200"
+                  : tariffAlert.type === "found"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-blue-50 text-blue-800 border border-blue-200"
             }`}
           >
             <AlertTriangle className="h-5 w-5 mt-0.5" />
@@ -456,9 +509,43 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                   ? "Tarifa Vencida"
                   : tariffAlert.type === "expiring"
                     ? "Tarifa Por Vencer"
-                    : "Tarifa No Encontrada"}
+                    : tariffAlert.type === "found"
+                      ? "Tarifa Detectada"
+                      : "Tarifa No Encontrada"}
               </p>
               <p className="text-sm">{tariffAlert.message}</p>
+              {tariffAlert.type === "found" && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {pendingTariff?.rate_per_trip && (
+                    <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs">
+                      $/Viaje: ${Number(pendingTariff.rate_per_trip).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                  {pendingTariff?.rate_per_ton && (
+                    <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs">
+                      $/TN: ${Number(pendingTariff.rate_per_ton).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                  {pendingTariff?.third_party_rate_per_trip && (
+                    <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs">
+                      $/Viaje 3eros: ${Number(pendingTariff.third_party_rate_per_trip).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                  {pendingTariff?.third_party_rate_per_ton && (
+                    <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs">
+                      $/TN 3eros: ${Number(pendingTariff.third_party_rate_per_ton).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                  <div className="ml-auto flex gap-2">
+                    <Button size="sm" variant="default" onClick={applyPendingTariff}>
+                      Usar Tarifa
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={dismissTariffAlert}>
+                      Ignorar
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -778,8 +865,11 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                 type="number"
                 step="0.01"
                 value={formData.trip_amount}
-                readOnly
-                className="bg-muted font-semibold"
+                onChange={(e) => {
+                  setIsManualTripAmount(true)
+                  setFormData({ ...formData, trip_amount: e.target.value })
+                }}
+                className="font-semibold"
               />
             </div>
             <div>
@@ -973,8 +1063,10 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                 type="number"
                 step="0.01"
                 value={formData.third_party_amount}
-                readOnly
-                className="bg-muted"
+                onChange={(e) => {
+                  setIsManualThirdPartyAmount(true)
+                  setFormData({ ...formData, third_party_amount: e.target.value })
+                }}
               />
             </div>
             <div>
