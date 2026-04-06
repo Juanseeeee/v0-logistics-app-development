@@ -57,6 +57,16 @@ export default function L2TripsPage() {
   const [sortField, setSortField] = useState<"date" | "invoice_date">("invoice_date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
+  const uniqueLocations = useMemo(() => {
+    const seen = new Set<string>()
+    return locations.filter((location) => {
+      const key = location.name?.trim().toLowerCase()
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [locations])
+
   useEffect(() => {
     loadData()
   }, [])
@@ -74,7 +84,7 @@ export default function L2TripsPage() {
           clients(company),
           products(name),
           drivers(name),
-          trips(trip_number, line)
+          trips(trip_number, date, line)
         `)
         .order("created_at", { ascending: false })
 
@@ -141,7 +151,13 @@ export default function L2TripsPage() {
 
       if (locationsError) throw locationsError
 
-      setL2Trips(l2TripsData || [])
+      const normalizedL2Trips = (l2TripsData || []).map((trip: any) => ({
+        ...trip,
+        trip_number: trip.trip_number ?? trip.trips?.trip_number ?? trip.invoice_number,
+        date: trip.date ?? trip.trips?.date ?? trip.invoice_date ?? "",
+      }))
+
+      setL2Trips(normalizedL2Trips)
       setL1Trips(l1TripsData || [])
       setClients(clientsData || [])
       setProducts(productsData || [])
@@ -154,6 +170,22 @@ export default function L2TripsPage() {
       setLoading(false)
     }
   }
+
+  const isTripBilled = (trip: L2Trip) =>
+    trip.client_invoice_passed === true &&
+    Boolean(trip.client_invoice_date) &&
+    Boolean(trip.client_payment_status?.trim())
+
+  const isTripSettled = (trip: L2Trip) =>
+    Boolean(trip.third_party_payment_date) &&
+    Boolean(trip.third_party_payment_status?.trim())
+
+  const billedTripsCount = useMemo(() => l2Trips.filter((trip) => isTripBilled(trip)).length, [l2Trips])
+  const settledTripsCount = useMemo(() => l2Trips.filter((trip) => isTripSettled(trip)).length, [l2Trips])
+  const completedTripsCount = useMemo(
+    () => l2Trips.filter((trip) => isTripBilled(trip) && isTripSettled(trip)).length,
+    [l2Trips],
+  )
 
   const filteredTrips = useMemo(() => {
     let filtered = [...l2Trips]
@@ -246,23 +278,11 @@ export default function L2TripsPage() {
 
     // Tab filters
     if (activeTab === "l2_billed") {
-      filtered = filtered.filter(
-        (t) => t.client_invoice_passed === true && t.client_invoice_number?.trim() && t.client_invoice_date
-      )
+      filtered = filtered.filter((t) => isTripBilled(t))
     } else if (activeTab === "l2_settled") {
-      filtered = filtered.filter(
-        (t) => t.third_party_invoice?.trim() && t.third_party_payment_date && t.third_party_payment_status === "PAGADO"
-      )
+      filtered = filtered.filter((t) => isTripSettled(t))
     } else if (activeTab === "l2_completed_all") {
-      filtered = filtered.filter(
-        (t) =>
-          t.client_invoice_passed === true &&
-          t.client_invoice_number?.trim() &&
-          t.client_invoice_date &&
-          t.third_party_invoice?.trim() &&
-          t.third_party_payment_date &&
-          t.third_party_payment_status === "PAGADO"
-      )
+      filtered = filtered.filter((t) => isTripBilled(t) && isTripSettled(t))
     }
 
     filtered.sort((a, b) => {
@@ -674,9 +694,9 @@ export default function L2TripsPage() {
           <TabsList className="flex flex-wrap h-auto gap-2 bg-transparent">
             <TabsTrigger value="pending" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Pendientes ({l1Trips.length})</TabsTrigger>
             <TabsTrigger value="l2" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos ({l2Trips.length})</TabsTrigger>
-            <TabsTrigger value="l2_billed" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">Facturados</TabsTrigger>
-            <TabsTrigger value="l2_settled" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">Liquidados</TabsTrigger>
-            <TabsTrigger value="l2_completed_all" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Completos</TabsTrigger>
+            <TabsTrigger value="l2_billed" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">Facturados ({billedTripsCount})</TabsTrigger>
+            <TabsTrigger value="l2_settled" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">Liquidados ({settledTripsCount})</TabsTrigger>
+            <TabsTrigger value="l2_completed_all" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">Completos ({completedTripsCount})</TabsTrigger>
           </TabsList>
 
           {/* Pending L1 Trips Tab */}
@@ -737,7 +757,7 @@ export default function L2TripsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Todos los orígenes</SelectItem>
-                            {locations.map((location) => (
+                            {uniqueLocations.map((location) => (
                               <SelectItem key={location.id} value={location.name}>
                                 {location.name}
                               </SelectItem>
@@ -751,7 +771,7 @@ export default function L2TripsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Todos los destinos</SelectItem>
-                            {locations.map((location) => (
+                            {uniqueLocations.map((location) => (
                               <SelectItem key={location.id} value={location.name}>
                                 {location.name}
                               </SelectItem>
@@ -958,7 +978,7 @@ export default function L2TripsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Todos los orígenes</SelectItem>
-                            {locations.map((location) => (
+                            {uniqueLocations.map((location) => (
                               <SelectItem key={location.id} value={location.name}>
                                 {location.name}
                               </SelectItem>
@@ -972,7 +992,7 @@ export default function L2TripsPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Todos los destinos</SelectItem>
-                            {locations.map((location) => (
+                            {uniqueLocations.map((location) => (
                               <SelectItem key={location.id} value={location.name}>
                                 {location.name}
                               </SelectItem>

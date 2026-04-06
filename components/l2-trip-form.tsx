@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,6 +32,16 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
   const [pendingTariff, setPendingTariff] = useState<any>(null)
   const [showQuickLocationDialog, setShowQuickLocationDialog] = useState(false)
   const [quickLocationType, setQuickLocationType] = useState<"origin" | "destination">("origin")
+
+  const uniqueLocations = useMemo(() => {
+    const seen = new Set<string>()
+    return locations.filter((location) => {
+      const key = location.name?.trim().toLowerCase()
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [locations])
 
   // Estado para controlar si las TN Descargadas fueron editadas manualmente
   const [isManualTons, setIsManualTons] = useState(() => {
@@ -661,7 +671,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                     <SelectValue placeholder="Seleccionar origen" />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((location) => (
+                    {uniqueLocations.map((location) => (
                       <SelectItem key={location.id} value={location.name}>
                         {location.name}
                       </SelectItem>
@@ -701,7 +711,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                     <SelectValue placeholder="Seleccionar destino" />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((location) => (
+                    {uniqueLocations.map((location) => (
                       <SelectItem key={location.id} value={location.name}>
                         {location.name}
                       </SelectItem>

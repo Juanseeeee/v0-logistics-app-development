@@ -1,5 +1,5 @@
 import jsPDF from "jspdf"
-import "jspdf-autotable"
+import autoTable from "jspdf-autotable"
 import { L2Trip } from "@/types/l2-trip"
 
 // Helper function to format dates
@@ -163,7 +163,7 @@ export const generateL2TripsListPDF = async (options: ExportListOptions) => {
   }
 
   // Table
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     head: [columns],
     body: data,
     startY: filtersText.length > 0 ? 40 : 35,
@@ -179,7 +179,7 @@ export const generateL2TripsListPDF = async (options: ExportListOptions) => {
   })
   
   // Totals
-  const finalY = (doc as any).lastAutoTable.finalY + 10
+  const finalY = ((doc as any).lastAutoTable?.finalY || 35) + 10
   doc.setFontSize(10)
   doc.setTextColor(0)
   
@@ -236,7 +236,7 @@ export const generateSingleL2TripPDF = async (trip: L2Trip) => {
     ["Patente Semi:", trip.semi_patent || "-"]
   ]
   
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     body: generalData,
     startY: yPos,
     theme: 'plain',
@@ -261,7 +261,7 @@ export const generateSingleL2TripPDF = async (trip: L2Trip) => {
     ["Diferencia:", trip.weight_difference || "-", "TN Descarga:", trip.tons_delivered || "-"]
   ]
 
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     body: logisticsData,
     startY: yPos,
     theme: 'plain',
@@ -286,7 +286,7 @@ export const generateSingleL2TripPDF = async (trip: L2Trip) => {
     ["Estado:", trip.client_payment_status || "-", "Estado:", trip.third_party_payment_status || "-"]
   ]
 
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     body: financeData,
     startY: yPos,
     theme: 'plain',
