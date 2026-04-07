@@ -38,37 +38,60 @@ async function changePassword(formData: FormData) {
   }
 
   // Update must_change_password flag using admin client to bypass RLS
-  const supabaseAdmin = await createClient(true) // Use service role
-  const { error: updateError } = await supabaseAdmin
+  // We use @supabase/supabase-js directly instead of createServerClient to avoid cookies overriding the service role
+  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js')
+  
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    console.error("Missing SUPABASE environment variables")
+    redirect("/auth/change-password?error=server_configuration_error")
+  }
+
+  const supabaseAdmin = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
+
+  const { error: updateError, data: updateData } = await supabaseAdmin
     .from("users")
     .update({ must_change_password: false })
     .eq("id", user.id)
+    .select()
+
+  console.log("Update result:", { updateError, updateData });
 
   if (updateError) {
     console.error("Error updating user status:", updateError)
-    // We don't redirect to error here because the password WAS changed.
-    // Ideally we'd retry or log it. The user will just be asked again next time if it fails?
-    // Or we just let them in.
+    redirect(`/auth/change-password?error=${encodeURIComponent(updateError.message)}`)
   }
+  
+  // Force session refresh so the updated user metadata is available to middleware
+  await supabase.auth.refreshSession()
 
   redirect("/documents")
 }
 
-export default function ChangePasswordPage({
+export default async function ChangePasswordPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
   let errorMessage = null
+  const resolvedSearchParams = await searchParams
 
-  if (searchParams.error === "passwords_do_not_match") {
+  if (resolvedSearchParams.error === "passwords_do_not_match") {
     errorMessage = "Las contraseñas no coinciden"
-  } else if (searchParams.error === "password_too_short") {
+  } else if (resolvedSearchParams.error === "password_too_short") {
     errorMessage = "La contraseña debe tener al menos 6 caracteres"
-  } else if (searchParams.error === "update_failed") {
+  } else if (resolvedSearchParams.error === "update_failed") {
     errorMessage = "Error al actualizar el estado del usuario"
-  } else if (searchParams.error) {
-    errorMessage = searchParams.error
+  } else if (resolvedSearchParams.error) {
+    errorMessage = resolvedSearchParams.error
   }
 
   return (

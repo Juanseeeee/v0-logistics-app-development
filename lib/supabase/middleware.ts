@@ -26,6 +26,9 @@ export async function updateSession(request: NextRequest) {
           )
         },
       },
+      global: {
+        fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }),
+      },
     },
   )
 
@@ -47,10 +50,45 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // If user is logged in and tries to access login page, redirect to hub
+  // Role-based restrictions
+  if (user && isProtectedPath) {
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+      
+    const role = userData?.role
+
+    // Driver can only access /documents
+    if (role === "driver") {
+      if (!request.nextUrl.pathname.startsWith("/documents")) {
+        const url = request.nextUrl.clone()
+        url.pathname = "/documents"
+        return NextResponse.redirect(url)
+      }
+    }
+  }
+
+  // If user is logged in and tries to access login page, redirect appropriately
   if (request.nextUrl.pathname === "/auth/login" && user) {
     const url = request.nextUrl.clone()
-    url.pathname = "/hub"
+    
+    // Check role for login redirect
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+      
+    if (userData?.role === "driver" || userData?.role === "company") {
+      url.pathname = "/documents"
+    } else if (userData?.role === "documents") {
+      url.pathname = "/documents-hub"
+    } else {
+      url.pathname = "/hub"
+    }
+    
     return NextResponse.redirect(url)
   }
 

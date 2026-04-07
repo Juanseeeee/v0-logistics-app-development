@@ -63,18 +63,19 @@ async function login(formData: FormData) {
   redirect("/auth/login?error=unknown")
 }
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
   let errorMessage = null
+  const resolvedSearchParams = await searchParams
 
-  if (searchParams.error === "no_role") {
+  if (resolvedSearchParams.error === "no_role") {
     errorMessage = "Tu cuenta no tiene permisos asignados. Contacta al administrador del sistema."
-  } else if (searchParams.error === "invalid_credentials") {
+  } else if (resolvedSearchParams.error === "invalid_credentials") {
     errorMessage = "Email o contraseña incorrectos"
-  } else if (searchParams.error === "unknown") {
+  } else if (resolvedSearchParams.error === "unknown") {
     errorMessage = "Error al iniciar sesión. Intenta nuevamente."
   }
 
