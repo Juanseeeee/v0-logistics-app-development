@@ -20,20 +20,27 @@ type DocumentType = {
   entity_type: string
 }
 
+type TransportCompany = {
+  id: string
+  name: string
+}
+
 type Props = {
   userRole: string
   userId: string
   documentTypes: DocumentType[]
+  transportCompanies: TransportCompany[]
   onSuccess?: () => void
 }
 
-export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess }: Props) {
+export function DocumentUploadForm({ userRole, userId, documentTypes, transportCompanies, onSuccess }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [hasNoExpiry, setHasNoExpiry] = useState(false)
   const [formData, setFormData] = useState({
     documentTypeId: "",
+    transportCompanyId: "",
     entityName: "",
     issueDate: "",
     expiryDate: "",
@@ -88,8 +95,8 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
 
       // Insertar documento en la base de datos
       const selectedDocType = documentTypes.find((dt) => dt.id === formData.documentTypeId)
-
-      const { error } = await supabase.from("documents").insert({
+      const selectedTransportCompany = transportCompanies.find((company) => company.id === formData.transportCompanyId)
+      const documentPayload: Record<string, any> = {
         document_type_id: formData.documentTypeId,
         entity_type: selectedDocType?.entity_type || "company",
         entity_name: formData.entityName || null,
@@ -101,7 +108,14 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
         notes: formData.notes || null,
         uploaded_by: userId,
         company_user_id: userRole === "company" || userRole === "driver" ? userId : null,
-      })
+      }
+
+      if (formData.transportCompanyId) {
+        documentPayload.transport_company_id = formData.transportCompanyId
+        documentPayload.transport_company_name = selectedTransportCompany?.name || null
+      }
+
+      const { error } = await supabase.from("documents").insert(documentPayload)
 
       if (error) throw error
 
@@ -112,6 +126,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
       setHasNoExpiry(false)
       setFormData({
         documentTypeId: "",
+        transportCompanyId: "",
         entityName: "",
         issueDate: "",
         expiryDate: "",
@@ -157,6 +172,26 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, onSuccess 
                 {availableDocTypes.map((dt) => (
                   <SelectItem key={dt.id} value={dt.id}>
                     {dt.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="transportCompany">Fletero</Label>
+            <Select
+              value={formData.transportCompanyId || "none"}
+              onValueChange={(value) => setFormData({ ...formData, transportCompanyId: value === "none" ? "" : value })}
+            >
+              <SelectTrigger id="transportCompany">
+                <SelectValue placeholder="Seleccione un fletero" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin fletero asignado</SelectItem>
+                {transportCompanies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -62,9 +62,9 @@ export async function HubDashboard() {
     })
   }
   const clientProfitData = Array.from(clientProfitMap.entries())
-    .map(([name, profit]) => ({ name, "Ganancia": profit }))
-    .sort((a, b) => b["Ganancia"] - a["Ganancia"])
-    .slice(0, 5) // Top 5 clients
+    .map(([name, profit]) => ({ name, "Ganancia": Math.round(profit) }))
+    .sort((a, b) => a["Ganancia"] - b["Ganancia"]) // Ascendente para que el mayor quede arriba en Recharts
+    .slice(-5) // Top 5 clients (los 5 mayores)
 
   return (
     <HubChartsClient 

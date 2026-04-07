@@ -27,6 +27,10 @@ export default async function DashboardPage() {
 
   const userRole = userData.role
 
+  if (userRole === "driver") {
+    redirect("/documents")
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -71,20 +75,6 @@ export default async function DashboardPage() {
                 />
               </svg>
               Manual de Usuario
-            </Button>
-          </Link>
-
-          <Link href="/presentation" prefetch={false}>
-            <Button size="lg" className="gap-2 bg-[#0038ae] hover:bg-[#002a85]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-              Ver Presentación
             </Button>
           </Link>
 

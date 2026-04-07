@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { FileText, Loader2, Upload, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -14,6 +15,8 @@ type Document = {
   id: string
   document_type_name: string
   entity_name: string | null
+  transport_company_id?: string | null
+  transport_company_name?: string | null
   file_name: string | null
   file_url: string | null
   issue_date: string | null
@@ -22,20 +25,27 @@ type Document = {
   created_at: string
 }
 
+type TransportCompany = {
+  id: string
+  name: string
+}
+
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   document: Document | null
   onSuccess: () => void
   userId: string
+  transportCompanies: TransportCompany[]
 }
 
-export function DocumentEditDialog({ open, onOpenChange, document, onSuccess, userId }: Props) {
+export function DocumentEditDialog({ open, onOpenChange, document, onSuccess, userId, transportCompanies }: Props) {
   const [loading, setLoading] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [hasNoExpiry, setHasNoExpiry] = useState(false)
   const [formData, setFormData] = useState({
     entityName: "",
+    transportCompanyId: "",
     issueDate: "",
     expiryDate: "",
     notes: "",
@@ -45,6 +55,7 @@ export function DocumentEditDialog({ open, onOpenChange, document, onSuccess, us
     if (document) {
       setFormData({
         entityName: document.entity_name || "",
+        transportCompanyId: document.transport_company_id || "",
         issueDate: document.issue_date || "",
         expiryDate: document.expiry_date || "",
         notes: document.notes || "",
@@ -68,11 +79,20 @@ export function DocumentEditDialog({ open, onOpenChange, document, onSuccess, us
 
     try {
       const supabase = createClient()
+      const selectedTransportCompany = transportCompanies.find((company) => company.id === formData.transportCompanyId)
       const updates: any = {
         entity_name: formData.entityName || null,
         issue_date: formData.issueDate || null,
         expiry_date: hasNoExpiry ? null : formData.expiryDate || null,
         notes: formData.notes || null,
+      }
+
+      if (formData.transportCompanyId) {
+        updates.transport_company_id = formData.transportCompanyId
+        updates.transport_company_name = selectedTransportCompany?.name || null
+      } else if (document?.transport_company_id || document?.transport_company_name) {
+        updates.transport_company_id = null
+        updates.transport_company_name = null
       }
 
       // Si hay nuevo archivo, subirlo
@@ -131,6 +151,26 @@ export function DocumentEditDialog({ open, onOpenChange, document, onSuccess, us
               value={formData.entityName}
               onChange={(e) => setFormData({ ...formData, entityName: e.target.value })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-transport-company">Fletero</Label>
+            <Select
+              value={formData.transportCompanyId || "none"}
+              onValueChange={(value) => setFormData({ ...formData, transportCompanyId: value === "none" ? "" : value })}
+            >
+              <SelectTrigger id="edit-transport-company">
+                <SelectValue placeholder="Seleccione un fletero" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin fletero asignado</SelectItem>
+                {transportCompanies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Archivo */}

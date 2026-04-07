@@ -39,7 +39,7 @@ export default async function ExpensesPage() {
   // Get L2 trips for client statistics and to include as income
   const { data: l2Trips } = await supabase
     .from("l2_trips")
-    .select("id, client_id, trip_amount, third_party_amount, invoice_date, payment_date, tons_delivered, clients(company)")
+    .select("id, client_id, trip_amount, third_party_amount, invoice_date, payment_date, client_invoice_date, client_payment_date, third_party_payment_date, tons_delivered, clients(company)")
 
   // Get fuel records to include as expenses
   const { data: fuelRecords } = await supabase
@@ -76,7 +76,7 @@ export default async function ExpensesPage() {
 
         expenses.push({
           id: `l2-${trip.id}`,
-          date: trip.invoice_date || trip.payment_date || new Date().toISOString().split("T")[0],
+          date: trip.client_payment_date || trip.client_invoice_date || trip.invoice_date || trip.payment_date || new Date().toISOString().split("T")[0],
           category: "L2 Viaje (Ganancia)",
           description: `Ganancia Viaje L2 - ${clientName}`,
           amount: profit,

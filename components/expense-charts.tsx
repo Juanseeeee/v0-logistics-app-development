@@ -112,8 +112,9 @@ export function ExpenseCharts({ expenses, l2Trips = [] }: { expenses: Expense[],
 
     // L2 Trips Logic (Client Stats)
     const sortedTrips = [...l2Trips].sort((a, b) => {
-      if (!a.date || !b.date) return 0
-      return new Date(a.date).getTime() - new Date(b.date).getTime()
+      const dateA = a.client_payment_date || a.client_invoice_date || a.invoice_date || a.payment_date || new Date().toISOString().split("T")[0]
+      const dateB = b.client_payment_date || b.client_invoice_date || b.invoice_date || b.payment_date || new Date().toISOString().split("T")[0]
+      return new Date(dateA).getTime() - new Date(dateB).getTime()
     })
 
     // C1: Ingresos y Ganancias por Cliente
@@ -143,8 +144,8 @@ export function ExpenseCharts({ expenses, l2Trips = [] }: { expenses: Expense[],
 
     // C2: Evolución de Ingresos Mensuales
     const byMonthRevenue = sortedTrips.reduce((acc, curr) => {
-      if (!curr.date) return acc
-      const month = format(parseISO(curr.date), "MMM yyyy", { locale: es })
+      const tripDate = curr.client_payment_date || curr.client_invoice_date || curr.invoice_date || curr.payment_date || new Date().toISOString().split("T")[0]
+      const month = format(parseISO(tripDate), "MMM yyyy", { locale: es })
       acc[month] = (acc[month] || 0) + (Number(curr.trip_amount) || 0)
       return acc
     }, {} as Record<string, number>)
