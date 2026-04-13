@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { L2TripForm } from "@/components/l2-trip-form"
 import { BulkEditDialog } from "@/components/bulk-edit-dialog"
 import { Plus, Search, Download, Edit, Trash2, ChevronLeft, ChevronRight, ArrowRight, FileText, Banknote, ListChecks, Filter, X, FileSpreadsheet, FileIcon } from "lucide-react"
@@ -56,6 +57,7 @@ export default function L2TripsPage() {
 
   const [sortField, setSortField] = useState<"date" | "invoice_date">("invoice_date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+  const [userEmail, setUserEmail] = useState<string>("")
 
   const uniqueLocations = useMemo(() => {
     const seen = new Set<string>()
@@ -76,6 +78,9 @@ export default function L2TripsPage() {
     setLoading(true)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUserEmail(user?.email || "")
+
       // Load L2 trips (trips already in L2)
       const { data: l2TripsData, error: l2Error } = await supabase
         .from("l2_trips")
@@ -278,11 +283,11 @@ export default function L2TripsPage() {
 
     // Tab filters
     if (activeTab === "l2_billed") {
-      filtered = filtered.filter((t) => isTripBilled(t))
+      filtered = filtered.filter((t) => isTripBilled(t) || t.bulk_billing_id)
     } else if (activeTab === "l2_settled") {
-      filtered = filtered.filter((t) => isTripSettled(t))
+      filtered = filtered.filter((t) => isTripSettled(t) || t.bulk_settlement_id)
     } else if (activeTab === "l2_completed_all") {
-      filtered = filtered.filter((t) => isTripBilled(t) && isTripSettled(t))
+      filtered = filtered.filter((t) => (isTripBilled(t) || t.bulk_billing_id) && (isTripSettled(t) || t.bulk_settlement_id))
     }
 
     filtered.sort((a, b) => {
@@ -433,6 +438,8 @@ export default function L2TripsPage() {
       Descarga: trip.destination,
       "Empresa Descarga": trip.destination_company,
       Chofer: trip.drivers?.name,
+      "Tarifa 3ero": trip.third_party_rate,
+      "$ Viaje 3ero": trip.third_party_amount,
       "Patente Camión": trip.chasis_patent,
       "Patente Semi": trip.semi_patent,
       "Estado Cliente": trip.client_payment_status,
@@ -465,6 +472,8 @@ export default function L2TripsPage() {
       { wch: 30 },
       { wch: 20 },
       { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
       { wch: 15 },
       { wch: 15 },
       { wch: 15 },
@@ -535,7 +544,8 @@ export default function L2TripsPage() {
   // Helper function to format dates without timezone conversion
   const formatLocalDate = (dateString: string) => {
     if (!dateString) return "-"
-    const [year, month, day] = dateString.split("-")
+    const datePart = dateString.split("T")[0]
+    const [year, month, day] = datePart.split("-")
     return `${day}/${month}/${year}`
   }
 
@@ -609,6 +619,59 @@ export default function L2TripsPage() {
     setBulkEditDialogOpen(true)
   }
 
+  const handleGroupBilled = async () => {
+    if (selectedTrips.length === 0) return
+    if (!confirm("¿Agrupar los viajes seleccionados en un nuevo bloque de facturación?")) return
+    const supabase = createClient()
+    const blockId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const { error } = await supabase.from("l2_trips").update({ 
+      bulk_billing_id: blockId,
+      bulk_billing_date: now
+    }).in("id", selectedTrips)
+    if (error) toast.error("Error al agrupar")
+    else {
+      toast.success("Viajes agrupados en bloque de facturación")
+      loadData()
+      setSelectedTrips([])
+    }
+  }
+
+  const handleGroupSettled = async () => {
+    if (selectedTrips.length === 0) return
+    if (!confirm("¿Agrupar los viajes seleccionados en un nuevo bloque de liquidación?")) return
+    const supabase = createClient()
+    const blockId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const { error } = await supabase.from("l2_trips").update({ 
+      bulk_settlement_id: blockId,
+      bulk_settlement_date: now
+    }).in("id", selectedTrips)
+    if (error) toast.error("Error al agrupar")
+    else {
+      toast.success("Viajes agrupados en bloque de liquidación")
+      loadData()
+      setSelectedTrips([])
+    }
+  }
+
+  const handleEditBlock = async (blockId: string, type: 'billing' | 'settlement') => {
+    const supabase = createClient()
+    const column = type === 'billing' ? 'bulk_billing_id' : 'bulk_settlement_id'
+    
+    const { data, error } = await supabase.from("l2_trips").select("id").eq(column, blockId)
+    
+    if (error || !data || data.length === 0) {
+      toast.error("Error al cargar el bloque")
+      return
+    }
+
+    const ids = data.map(t => t.id)
+    setSelectedTrips(ids)
+    setBulkEditMode(type)
+    setBulkEditDialogOpen(true)
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Cargando...</div>
   }
@@ -658,6 +721,22 @@ export default function L2TripsPage() {
                 <Banknote className="mr-2 h-4 w-4" />
                 Liquidar masivamente ({selectedTrips.length})
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary">
+                    <ListChecks className="mr-2 h-4 w-4" />
+                    Agrupar
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={handleGroupBilled}>
+                    Agrupar en Bloque de Facturación
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleGroupSettled}>
+                    Agrupar en Bloque de Liquidación
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
           <DropdownMenu>
@@ -1121,12 +1200,14 @@ export default function L2TripsPage() {
                   ${totals.thirdPartyAmount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="bg-card rounded-lg border p-6">
-                <p className="text-sm text-muted-foreground">Ganancia</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  ${totals.profit.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                </p>
-              </div>
+              {userEmail === "clamelza@logisticacronos.com.ar" && (
+                <div className="bg-card rounded-lg border p-6">
+                  <p className="text-sm text-muted-foreground">Ganancia</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    ${totals.profit.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Table */}
@@ -1162,6 +1243,12 @@ export default function L2TripsPage() {
                       <TableHead>Chofer</TableHead>
                       <TableHead>Origen</TableHead>
                       <TableHead>Destino</TableHead>
+                      {activeTab === "l2" && (
+                        <>
+                          <TableHead>Bloque Facturación</TableHead>
+                          <TableHead>Bloque Liquidación</TableHead>
+                        </>
+                      )}
                       {(activeTab === "l2" || activeTab === "l2_billed" || activeTab === "l2_completed_all") && (
                         <TableHead>Estado Cliente</TableHead>
                       )}
@@ -1202,6 +1289,36 @@ export default function L2TripsPage() {
                           <TableCell>{trip.drivers?.name}</TableCell>
                           <TableCell>{trip.origin}</TableCell>
                           <TableCell>{trip.destination}</TableCell>
+                          {activeTab === "l2" && (
+                            <>
+                              <TableCell>
+                                {trip.bulk_billing_id ? (
+                                  <Button 
+                                    variant="link" 
+                                    className="p-0 h-auto text-xs text-blue-600 hover:text-blue-800"
+                                    onClick={() => handleEditBlock(trip.bulk_billing_id!, "billing")}
+                                  >
+                                    BLQ FACT {formatLocalDate(trip.bulk_billing_date || trip.client_invoice_date || trip.invoice_date)}
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {trip.bulk_settlement_id ? (
+                                  <Button 
+                                    variant="link" 
+                                    className="p-0 h-auto text-xs text-blue-600 hover:text-blue-800"
+                                    onClick={() => handleEditBlock(trip.bulk_settlement_id!, "settlement")}
+                                  >
+                                    BLQ LIQ {formatLocalDate(trip.bulk_settlement_date || trip.third_party_payment_date || trip.invoice_date)}
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                            </>
+                          )}
                           {(activeTab === "l2" || activeTab === "l2_billed" || activeTab === "l2_completed_all") && (
                             <TableCell>
                               <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1229,22 +1346,82 @@ export default function L2TripsPage() {
                           )}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleExportTripPDF(trip)}>
-                                <FileIcon className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setSelectedTrip(trip)
-                                  setDialogOpen(true)
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDelete(trip.id)}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleExportTripPDF(trip)}>
+                                      <FileIcon className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Exportar PDF</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        setSelectedTrip(trip)
+                                        setDialogOpen(true)
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Editar Viaje</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              {(trip.bulk_billing_id || trip.bulk_settlement_id) && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="icon">
+                                            <ListChecks className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          {trip.bulk_billing_id && (
+                                            <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_billing_id!, "billing")}>
+                                              Editar Bloque Facturación
+                                            </DropdownMenuItem>
+                                          )}
+                                          {trip.bulk_settlement_id && (
+                                            <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_settlement_id!, "settlement")}>
+                                              Editar Bloque Liquidación
+                                            </DropdownMenuItem>
+                                          )}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Editar Bloques</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(trip.id)}>
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Eliminar Viaje</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1316,6 +1493,7 @@ export default function L2TripsPage() {
         onOpenChange={setBulkEditDialogOpen}
         selectedTripIds={selectedTrips}
         onSuccess={handleBulkEditSuccess}
+        mode={bulkEditMode}
       />
     </div>
   )

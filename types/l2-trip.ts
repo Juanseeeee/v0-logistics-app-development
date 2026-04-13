@@ -76,11 +76,18 @@ export interface L2Trip {
   client_invoice_passed?: boolean;
   client_invoice_number?: string;
   client_invoice_date?: string;
+  client_payment_date?: string;
   client_payment_status?: string;
+  client_fca_number?: string;
   
   third_party_invoice?: string;
   third_party_payment_date?: string;
   third_party_payment_status?: string;
+
+  bulk_billing_id?: string;
+  bulk_settlement_id?: string;
+  bulk_billing_date?: string;
+  bulk_settlement_date?: string;
 
   // Relations
   clients?: Client;
