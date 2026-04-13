@@ -341,6 +341,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
     setLoading(true)
 
     const supabase = createClient()
