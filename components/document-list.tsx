@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Building2, Truck, Users, Download, Search, Calendar, FileText, Trash2, Edit, FilterX } from "lucide-react"
+import { Building2, Truck, Users, Download, Search, Calendar, FileText, Trash2, Edit, FilterX, CheckSquare } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { DocumentEditDialog } from "./document-edit-dialog"
+import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "sonner"
 
 type Document = {
   id: string
@@ -191,6 +193,23 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
     }
   }
 
+  async function handleBulkAssignFletero(docIds: string[], companyId: string, companyName: string) {
+    const { error } = await supabase
+      .from("documents")
+      .update({
+        transport_company_id: companyId === "none" ? null : companyId,
+        transport_company_name: companyId === "none" ? null : companyName,
+      })
+      .in("id", docIds)
+
+    if (error) {
+      toast.error("Error al asignar fletero", { description: error.message })
+    } else {
+      toast.success(`Fletero asignado a ${docIds.length} documentos`)
+      fetchDocuments()
+    }
+  }
+
   const getExpiryStatus = (expiryDate: string | null): ExpiryStatus | null => {
     if (!expiryDate) return null
     const today = new Date()
@@ -341,6 +360,8 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
                   onDelete={handleDelete}
                   onEdit={setEditingDocument}
                   getExpiryStatus={getExpiryStatus}
+                  transportCompanies={transportCompanies}
+                  onBulkAssign={handleBulkAssignFletero}
                 />
               </TabsContent>
             ))}
@@ -372,6 +393,8 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
             onDelete={handleDelete}
             onEdit={setEditingDocument}
             getExpiryStatus={getExpiryStatus}
+            transportCompanies={transportCompanies}
+            onBulkAssign={handleBulkAssignFletero}
           />
         </div>
       )}
@@ -505,6 +528,8 @@ function DocumentTable({
   onDelete,
   onEdit,
   getExpiryStatus,
+  transportCompanies,
+  onBulkAssign,
 }: {
   documents: Document[]
   loading: boolean
@@ -512,13 +537,79 @@ function DocumentTable({
   onDelete: (id: string) => void
   onEdit: (doc: Document) => void
   getExpiryStatus: (date: string | null) => ExpiryStatus | null
+  transportCompanies: TransportCompany[]
+  onBulkAssign: (docIds: string[], companyId: string, companyName: string) => Promise<void>
 }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkCompanyId, setBulkCompanyId] = useState<string>("")
+  const [isAssigning, setIsAssigning] = useState(false)
+
+  // Deseleccionar al cambiar de pestaña o cuando cambian los documentos
+  useEffect(() => {
+    setSelectedIds([])
+  }, [tab, documents])
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === documents.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(documents.map(d => d.id))
+    }
+  }
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(docId => docId !== id) : [...prev, id]
+    )
+  }
+
+  const handleApplyBulkAssign = async () => {
+    if (!bulkCompanyId) {
+      toast.error("Seleccione un fletero")
+      return
+    }
+    setIsAssigning(true)
+    const companyName = bulkCompanyId === "none" ? "" : transportCompanies.find(c => c.id === bulkCompanyId)?.name || ""
+    await onBulkAssign(selectedIds, bulkCompanyId, companyName)
+    setSelectedIds([])
+    setBulkCompanyId("")
+    setIsAssigning(false)
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Documentos {tab === "company" ? "de Empresa" : tab === "vehicle" ? "de Vehículos" : "de Chofer"}</span>
-          <Badge variant="outline">{documents.length} documentos</Badge>
+          <div className="flex items-center gap-4">
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-md border">
+                <span className="text-xs font-medium px-2">{selectedIds.length} seleccionados</span>
+                <Select value={bulkCompanyId} onValueChange={setBulkCompanyId}>
+                  <SelectTrigger className="h-8 w-[180px] text-xs">
+                    <SelectValue placeholder="Asignar fletero..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin fletero asignado</SelectItem>
+                    {transportCompanies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  size="sm" 
+                  className="h-8 text-xs" 
+                  disabled={!bulkCompanyId || isAssigning}
+                  onClick={handleApplyBulkAssign}
+                >
+                  {isAssigning ? "Aplicando..." : "Aplicar"}
+                </Button>
+              </div>
+            )}
+            <Badge variant="outline">{documents.length} documentos</Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -535,6 +626,13 @@ function DocumentTable({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox 
+                      checked={selectedIds.length > 0 && selectedIds.length === documents.length}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Seleccionar todos"
+                    />
+                  </TableHead>
                   <TableHead className="whitespace-nowrap">Fletero</TableHead>
                   <TableHead className="whitespace-nowrap">Tipo de Documento</TableHead>
                   <TableHead className="whitespace-nowrap">Archivo</TableHead>
@@ -547,8 +645,16 @@ function DocumentTable({
               <TableBody>
                 {documents.map((doc) => {
                   const status = getExpiryStatus(doc.expiry_date)
+                  const isSelected = selectedIds.includes(doc.id)
                   return (
-                    <TableRow key={doc.id}>
+                    <TableRow key={doc.id} className={isSelected ? "bg-muted/50" : ""}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelectRow(doc.id)}
+                          aria-label={`Seleccionar documento ${doc.document_type_name}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {doc.transport_company_name ? (
                           doc.transport_company_name
