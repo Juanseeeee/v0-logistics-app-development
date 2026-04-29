@@ -1,6 +1,6 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-import { L2Trip } from "@/types/l2-trip"
+import { L2Trip, Client, TripGroup } from "@/types/l2-trip"
 
 // Helper function to format dates
 const formatLocalDate = (dateString?: string) => {
@@ -306,5 +306,96 @@ export const generateSingleL2TripPDF = async (trip: L2Trip) => {
   doc.setFontSize(12)
   doc.text(`Margen del Viaje: $${margin.toLocaleString("es-AR")}`, 14, yPos + 5)
 
-  doc.save(`viaje_l2_${trip.trip_number}.pdf`)
+  doc.save(`${trip.trip_number ? `Viaje_L2_${trip.trip_number}` : 'Detalle_Viaje'}.pdf`)
+}
+
+export const generateGroupedTripsPDF = async (groups: TripGroup[], activeTab: "l2_billed" | "l2_settled") => {
+  const doc = new jsPDF()
+  const logoData = await addLogo()
+
+  const isBilled = activeTab === "l2_billed"
+  const themeColor = isBilled ? [39, 174, 96] : [211, 84, 0] // Green or Orange
+  
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i]
+    if (i > 0) doc.addPage()
+    
+    if (logoData) doc.addImage(logoData, "PNG", 14, 10, 30, 15)
+
+    const title = isBilled ? "Facturación de Viajes" : "Liquidación a Terceros"
+    
+    // Header
+    doc.setFontSize(18)
+    doc.setTextColor(40)
+    doc.text(title, 50, 20)
+    
+    doc.setFontSize(10)
+    doc.setTextColor(100)
+    doc.text(`Fecha de Emisión: ${formatLocalDate(new Date().toISOString().split("T")[0])}`, 50, 26)
+
+    let yPos = 40
+
+    // General Info Box
+    doc.setFontSize(12)
+    doc.setTextColor(40)
+    doc.setFillColor(240, 240, 240)
+    doc.rect(14, yPos - 5, 182, 8, "F")
+    doc.text("Detalle del Comprobante", 16, yPos)
+    yPos += 10
+    
+    const generalData = [
+      ["Nº Comprobante:", group.invoiceNumber || "Sin Especificar", isBilled ? "Cliente:" : "Transportista:", group.clientOrTransport || "-"],
+      ["Fecha Comprobante:", formatLocalDate(group.date), "Estado:", group.status],
+      ["Total:", `$${group.amount.toLocaleString("es-AR")}`, "", ""]
+    ]
+    
+    autoTable(doc, {
+      body: generalData,
+      startY: yPos,
+      theme: 'plain',
+      styles: { cellPadding: 1, fontSize: 10 },
+      columnStyles: { 
+        0: { fontStyle: 'bold', cellWidth: 40 },
+        2: { fontStyle: 'bold', cellWidth: 35 }
+      }
+    })
+    
+    yPos = (doc as any).lastAutoTable.finalY + 15
+    
+    // Trips Table
+    doc.setFontSize(12)
+    doc.setFillColor(240, 240, 240)
+    doc.rect(14, yPos - 5, 182, 8, "F")
+    doc.text("Viajes Asociados", 16, yPos)
+    yPos += 5
+    
+    const columns = ["Fecha", "Viaje", "RTO", "Origen", "Destino", "Tarifa", "Monto"]
+    const data = group.trips.map(trip => {
+      const date = trip.date || trip.invoice_date || ""
+      const amount = Number(isBilled ? trip.trip_amount : trip.third_party_amount) || 0
+      const tariff = Number(isBilled ? trip.tariff_rate : trip.third_party_rate) || 0
+      return [
+        formatLocalDate(date),
+        trip.trip_number || "-",
+        trip.invoice_number || "-",
+        trip.origin || "-",
+        trip.destination || "-",
+        `$${tariff.toLocaleString("es-AR")}`,
+        `$${amount.toLocaleString("es-AR")}`
+      ]
+    })
+    
+    autoTable(doc, {
+      head: [columns],
+      body: data,
+      startY: yPos,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: themeColor },
+      foot: [["", "", "", "", "", "TOTAL", `$${group.amount.toLocaleString("es-AR")}`]],
+      footStyles: { fillColor: [220, 220, 220], textColor: [0,0,0], fontStyle: 'bold' }
+    })
+  }
+
+  const fileName = `Comprobantes_${isBilled ? 'Facturacion' : 'Liquidacion'}_${new Date().toISOString().split("T")[0]}.pdf`
+  doc.save(fileName)
 }
