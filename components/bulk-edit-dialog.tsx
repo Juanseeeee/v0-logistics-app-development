@@ -495,6 +495,25 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
                         ) : null}
                       </TableRow>
                     ))}
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell colSpan={3} className="text-right">Totales:</TableCell>
+                      {mode === "billing" || mode === "full" ? (
+                        <>
+                          <TableCell className="text-xs">
+                            ${tripsData.reduce((sum, trip) => sum + (Number(trip.trip_amount) || 0), 0).toLocaleString("es-AR")}
+                          </TableCell>
+                          <TableCell></TableCell>
+                        </>
+                      ) : null}
+                      {mode === "settlement" || mode === "full" ? (
+                        <>
+                          <TableCell className="text-xs">
+                            ${tripsData.reduce((sum, trip) => sum + (Number(trip.third_party_amount) || 0), 0).toLocaleString("es-AR")}
+                          </TableCell>
+                          <TableCell></TableCell>
+                        </>
+                      ) : null}
+                    </TableRow>
                   </TableBody>
                 </Table>
               </ScrollArea>

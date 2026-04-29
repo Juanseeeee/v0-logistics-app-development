@@ -18,8 +18,9 @@ import { BulkEditDialog } from "@/components/bulk-edit-dialog"
 import { Plus, Search, Download, Edit, Trash2, ChevronLeft, ChevronRight, ArrowRight, FileText, Banknote, ListChecks, Filter, X, FileSpreadsheet, FileIcon } from "lucide-react"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
-import { generateL2TripsListPDF, generateSingleL2TripPDF } from "@/lib/pdf/l2-trips-pdf"
-import { L2Trip, L1Trip, Client, Driver, Product, Location } from "@/types/l2-trip"
+import { generateL2TripsListPDF, generateSingleL2TripPDF, generateGroupedTripsPDF } from "@/lib/pdf/l2-trips-pdf"
+import { L2Trip, L1Trip, Client, Driver, Product, Location, TripGroup } from "@/types/l2-trip"
+import { GroupedL2TripsTable } from "@/components/grouped-l2-trips-table"
 
 export default function L2TripsPage() {
   const [l2Trips, setL2Trips] = useState<L2Trip[]>([])
@@ -35,6 +36,7 @@ export default function L2TripsPage() {
   const [selectedTrip, setSelectedTrip] = useState<L2Trip | null>(null)
   const [activeTab, setActiveTab] = useState("l2")
   const [selectedTrips, setSelectedTrips] = useState<string[]>([])
+  const [selectedGroups, setSelectedGroups] = useState<TripGroup[]>([])
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -191,6 +193,13 @@ export default function L2TripsPage() {
     () => l2Trips.filter((trip) => isTripBilled(trip) && isTripSettled(trip)).length,
     [l2Trips],
   )
+
+  const selectedTripsTotalAmount = useMemo(() => {
+    return selectedTrips.reduce((total, tripId) => {
+      const trip = l2Trips.find(t => t.id === tripId)
+      return total + (Number(trip?.trip_amount) || 0)
+    }, 0)
+  }, [selectedTrips, l2Trips])
 
   const filteredTrips = useMemo(() => {
     let filtered = [...l2Trips]
@@ -513,6 +522,12 @@ export default function L2TripsPage() {
     toast.success("PDF generado exitosamente")
   }
 
+  const handleExportSelectedGroupsPDF = async () => {
+    if (selectedGroups.length === 0) return
+    await generateGroupedTripsPDF(selectedGroups, activeTab as "l2_billed" | "l2_settled")
+    toast.success("PDF generado exitosamente")
+  }
+
   const toggleSort = () => {
     setSortDirection(sortDirection === "asc" ? "desc" : "asc")
   }
@@ -552,6 +567,7 @@ export default function L2TripsPage() {
   const handleTabChange = (value: string) => {
     setActiveTab(value)
     setSelectedTrips([])
+    setSelectedGroups([])
   }
 
   const promoteToL2 = async (l1Trip: L1Trip) => {
@@ -707,6 +723,17 @@ export default function L2TripsPage() {
 
       <div className="container mx-auto px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
         <div className="flex flex-wrap justify-end items-center gap-2">
+          {selectedTrips.length > 0 && activeTab !== "pending" && (
+            <div className="mr-auto px-4 py-2 bg-blue-50 text-blue-800 rounded-md border border-blue-200 font-semibold">
+              Total Seleccionado: ${selectedTripsTotalAmount.toLocaleString("es-AR")}
+            </div>
+          )}
+          {selectedGroups.length > 0 && (activeTab === "l2_billed" || activeTab === "l2_settled") && (
+            <Button onClick={handleExportSelectedGroupsPDF} variant="secondary">
+              <FileIcon className="mr-2 h-4 w-4" />
+              Descargar PDF ({selectedGroups.length})
+            </Button>
+          )}
           {selectedTrips.length > 0 && activeTab !== "pending" && (
             <>
               <Button onClick={handleBulkBilling} variant="secondary">
@@ -1213,6 +1240,93 @@ export default function L2TripsPage() {
             {/* Table */}
             <div className="bg-card rounded-lg border overflow-hidden">
               <div className="overflow-x-auto">
+                {(activeTab === "l2_billed" || activeTab === "l2_settled") ? (
+                  <GroupedL2TripsTable 
+                    trips={filteredTrips}
+                    activeTab={activeTab}
+                    onEditTrip={(trip) => {
+                      setSelectedTrip(trip)
+                      setDialogOpen(true)
+                    }}
+                    onExportTripPDF={handleExportTripPDF}
+                    onExportGroupPDF={(group) => generateGroupedTripsPDF([group], activeTab as "l2_billed" | "l2_settled")}
+                    onEditBlock={handleEditBlock}
+                    selectedGroupIds={selectedGroups.map(g => g.id)}
+                    onSelectGroup={(groupId, checked) => {
+                      if (checked) {
+                        // Find the group based on the logic in the component
+                        const isBilled = activeTab === "l2_billed"
+                        const tripsInGroup = filteredTrips.filter(t => {
+                          const invoiceNumber = isBilled ? t.client_invoice_number : t.third_party_invoice
+                          const clientOrTransport = isBilled ? t.clients?.company : (t.drivers?.transport_company?.name || t.drivers?.name)
+                          const key = `${invoiceNumber || "SIN-COMP"}-${clientOrTransport || "SIN-CLI"}`
+                          return key === groupId
+                        })
+                        if (tripsInGroup.length > 0) {
+                          const firstTrip = tripsInGroup[0]
+                          const invoiceNumber = isBilled ? firstTrip.client_invoice_number : firstTrip.third_party_invoice
+                          const clientOrTransport = isBilled ? firstTrip.clients?.company : (firstTrip.drivers?.transport_company?.name || firstTrip.drivers?.name)
+                          const date = isBilled ? (firstTrip.client_invoice_date || firstTrip.bulk_billing_date || firstTrip.invoice_date) : (firstTrip.third_party_payment_date || firstTrip.bulk_settlement_date || firstTrip.invoice_date)
+                          const status = isBilled ? firstTrip.client_payment_status : firstTrip.third_party_payment_status
+                          const amount = tripsInGroup.reduce((sum, t) => sum + (Number(isBilled ? t.trip_amount : t.third_party_amount) || 0), 0)
+                          const blockId = isBilled ? firstTrip.bulk_billing_id : firstTrip.bulk_settlement_id
+                          
+                          setSelectedGroups([...selectedGroups, {
+                            id: groupId,
+                            invoiceNumber: invoiceNumber || "Sin Comprobante",
+                            date: date || "",
+                            clientOrTransport: clientOrTransport || "Sin Especificar",
+                            amount,
+                            status: status || (isBilled ? "PENDIENTE" : "IMPAGO"),
+                            blockId,
+                            trips: tripsInGroup
+                          }])
+                        }
+                      } else {
+                        setSelectedGroups(selectedGroups.filter(g => g.id !== groupId))
+                      }
+                    }}
+                    onSelectAllGroups={(checked, allGroupIds) => {
+                      if (checked) {
+                        // Build all groups
+                        const isBilled = activeTab === "l2_billed"
+                        const newGroups: TripGroup[] = []
+                        const groupsMap = new Map<string, TripGroup>()
+                        
+                        filteredTrips.forEach(t => {
+                          const invoiceNumber = isBilled ? t.client_invoice_number : t.third_party_invoice
+                          const clientOrTransport = isBilled ? t.clients?.company : (t.drivers?.transport_company?.name || t.drivers?.name)
+                          const key = `${invoiceNumber || "SIN-COMP"}-${clientOrTransport || "SIN-CLI"}`
+                          
+                          if (!groupsMap.has(key)) {
+                            const date = isBilled ? (t.client_invoice_date || t.bulk_billing_date || t.invoice_date) : (t.third_party_payment_date || t.bulk_settlement_date || t.invoice_date)
+                            const status = isBilled ? t.client_payment_status : t.third_party_payment_status
+                            const blockId = isBilled ? t.bulk_billing_id : t.bulk_settlement_id
+                            
+                            groupsMap.set(key, {
+                              id: key,
+                              invoiceNumber: invoiceNumber || "Sin Comprobante",
+                              date: date || "",
+                              clientOrTransport: clientOrTransport || "Sin Especificar",
+                              amount: 0,
+                              status: status || (isBilled ? "PENDIENTE" : "IMPAGO"),
+                              blockId,
+                              trips: []
+                            })
+                          }
+                          
+                          const g = groupsMap.get(key)!
+                          g.amount += (Number(isBilled ? t.trip_amount : t.third_party_amount) || 0)
+                          g.trips.push(t)
+                        })
+                        
+                        setSelectedGroups(Array.from(groupsMap.values()))
+                      } else {
+                        setSelectedGroups([])
+                      }
+                    }}
+                  />
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1240,9 +1354,11 @@ export default function L2TripsPage() {
                       </TableHead>
                       <TableHead>RTO</TableHead>
                       <TableHead>Cliente</TableHead>
+                      <TableHead>Fletero</TableHead>
                       <TableHead>Chofer</TableHead>
                       <TableHead>Origen</TableHead>
                       <TableHead>Destino</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
                       {activeTab === "l2" && (
                         <>
                           <TableHead>Bloque Facturación</TableHead>
@@ -1286,9 +1402,13 @@ export default function L2TripsPage() {
                             <div>{trip.clients?.company}</div>
                             <div className="text-xs text-muted-foreground">{trip.product}</div>
                           </TableCell>
+                          <TableCell className="text-xs">{trip.third_party_transport || trip.drivers?.transport_company?.name || "-"}</TableCell>
                           <TableCell>{trip.drivers?.name}</TableCell>
                           <TableCell>{trip.origin}</TableCell>
                           <TableCell>{trip.destination}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            ${Number(trip.trip_amount || 0).toLocaleString("es-AR")}
+                          </TableCell>
                           {activeTab === "l2" && (
                             <>
                               <TableCell>
@@ -1429,10 +1549,11 @@ export default function L2TripsPage() {
                     )}
                   </TableBody>
                 </Table>
+                )}
               </div>
 
               {/* Pagination */}
-              {filteredTrips.length > itemsPerPage && (
+              {activeTab !== "l2_billed" && activeTab !== "l2_settled" && filteredTrips.length > itemsPerPage && (
                 <div className="flex items-center justify-between px-4 py-4 border-t">
                   <div className="text-sm text-muted-foreground">
                     Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}

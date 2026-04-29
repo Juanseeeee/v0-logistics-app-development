@@ -94,3 +94,14 @@ export interface L2Trip {
   products?: Product;
   drivers?: Driver;
 }
+
+export interface TripGroup {
+  id: string
+  invoiceNumber: string
+  date: string
+  clientOrTransport: string
+  amount: number
+  status: string
+  blockId?: string
+  trips: L2Trip[]
+}

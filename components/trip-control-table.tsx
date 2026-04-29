@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -444,19 +444,19 @@ export function TripControlTable({
     })
   }
 
-  const uniqueLines = Array.from(new Set(trips.map((t) => t.line))).sort()
-  const uniqueDrivers = Array.from(new Set(trips.map((t) => t.driver.name))).sort()
-  const uniqueProducts = Array.from(new Set(trips.map((t) => t.product))).sort()
-  const uniqueClients = Array.from(new Set(clients.map((c) => c.company))).sort()
+  const uniqueLines = Array.from(new Set(trips.map((t) => t.line))).filter(Boolean).sort()
+  const uniqueDrivers = Array.from(new Set(trips.map((t) => t.driver?.name))).filter(Boolean).sort()
+  const uniqueProducts = Array.from(new Set(trips.map((t) => t.product))).filter(Boolean).sort()
+  const uniqueClients = Array.from(new Set(clients.map((c) => c.company))).filter(Boolean).sort()
   const uniqueTransportCompanies = Array.from(
     new Set(
-      trips.map((t) => t.driver.chasis?.transport_companies?.name).filter((name): name is string => name != null),
+      trips.map((t) => t.driver?.chasis?.transport_companies?.name).filter((name): name is string => name != null && name !== ""),
     ),
   ).sort()
   // Get unique locations from actual trips to show only used locations
-  const uniqueLoadingLocations = Array.from(new Set(trips.map((t) => t.loading_location))).sort()
-  const uniqueUnloadingLocations = Array.from(new Set(trips.map((t) => t.unloading_location))).sort()
-  const uniqueLocations = Array.from(new Set([...uniqueLoadingLocations, ...uniqueUnloadingLocations])).sort()
+  const uniqueLoadingLocations = Array.from(new Set(trips.map((t) => t.loading_location))).filter(Boolean).sort()
+  const uniqueUnloadingLocations = Array.from(new Set(trips.map((t) => t.unloading_location))).filter(Boolean).sort()
+  const uniqueLocations = Array.from(new Set([...uniqueLoadingLocations, ...uniqueUnloadingLocations])).filter(Boolean).sort()
 
   const filteredTrips = trips.filter((trip) => {
     const matchesSearch =
@@ -918,9 +918,8 @@ export function TripControlTable({
                   </TableRow>
                 ) : (
                   paginatedTrips.map((trip) => (
-                    <>
+                    <React.Fragment key={trip.id}>
                       <TableRow
-                        key={trip.id}
                         className={`${getStatusColor(trip.status)} hover:opacity-90 transition-opacity`}
                       >
                         <TableCell className="font-medium">
@@ -1053,7 +1052,7 @@ export function TripControlTable({
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
