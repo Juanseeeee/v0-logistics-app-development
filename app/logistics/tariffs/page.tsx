@@ -125,7 +125,8 @@ export default function TariffsPage() {
     if (filterCurrency !== "all" && (tariff.currency || "ARS") !== filterCurrency) return false
     if (filterStatus !== "all") {
       const statusInfo = getTariffStatus(tariff)
-      if (filterStatus !== statusInfo.status) return false
+      const mappedStatus = statusInfo.status === "por vencer" ? "vigente" : statusInfo.status
+      if (filterStatus !== mappedStatus) return false
     }
     if (filterKm !== "") {
       const minKm = Number.parseFloat(filterKm)
@@ -340,7 +341,6 @@ export default function TariffsPage() {
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="vigente">Vigente</SelectItem>
-              <SelectItem value="por vencer">Por vencer</SelectItem>
               <SelectItem value="vencida">Vencida</SelectItem>
               <SelectItem value="indefinido">Indefinido</SelectItem>
             </SelectContent>
