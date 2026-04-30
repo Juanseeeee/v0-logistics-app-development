@@ -23,6 +23,7 @@ interface TariffFormProps {
 
 export function TariffForm({ tariff, clients, products, locations, transportCompanies, onSuccess }: TariffFormProps) {
   const [loading, setLoading] = useState(false)
+  const [saveAsNewVersion, setSaveAsNewVersion] = useState(!!tariff)
   const [formData, setFormData] = useState({
     client_id: tariff?.client_id || "all",
     product_id: tariff?.product_id || "all",
@@ -73,7 +74,7 @@ export function TariffForm({ tariff, clients, products, locations, transportComp
         active: formData.active,
       }
 
-      if (tariff) {
+      if (tariff && !saveAsNewVersion) {
         const { error } = await supabase
           .from("l2_tariffs")
           .update({ ...dataToSave, updated_at: new Date().toISOString() })
@@ -81,6 +82,29 @@ export function TariffForm({ tariff, clients, products, locations, transportComp
 
         if (error) throw error
         toast.success("Tarifa actualizada exitosamente")
+      } else if (tariff && saveAsNewVersion) {
+        // Archivar tarifa actual
+        const today = new Date()
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        const validUntilDate = tariff.valid_until ? tariff.valid_until : yesterday.toISOString().split('T')[0]
+        
+        const { error: errorUpdate } = await supabase
+          .from("l2_tariffs")
+          .update({ 
+            active: false, 
+            valid_until: validUntilDate,
+            updated_at: new Date().toISOString() 
+          })
+          .eq("id", tariff.id)
+        
+        if (errorUpdate) throw errorUpdate
+
+        // Insertar como nueva versión
+        const { error: errorInsert } = await supabase.from("l2_tariffs").insert([dataToSave])
+        if (errorInsert) throw errorInsert
+
+        toast.success("Nueva versión de tarifa creada exitosamente")
       } else {
         const { error } = await supabase.from("l2_tariffs").insert([dataToSave])
 
@@ -375,6 +399,25 @@ export function TariffForm({ tariff, clients, products, locations, transportComp
           Tarifa activa
         </Label>
       </div>
+
+      {tariff && (
+        <div className="flex items-start space-x-3 bg-blue-50 p-4 rounded-lg border border-blue-100">
+          <Checkbox
+            id="saveAsNewVersion"
+            checked={saveAsNewVersion}
+            onCheckedChange={(checked) => setSaveAsNewVersion(checked as boolean)}
+            className="mt-1"
+          />
+          <div className="grid gap-1.5 leading-none">
+            <Label htmlFor="saveAsNewVersion" className="text-sm font-semibold text-blue-900 cursor-pointer">
+              Guardar como nueva versión (Conservar historial)
+            </Label>
+            <p className="text-xs text-blue-700 leading-snug">
+              Crea un nuevo registro con estos datos y archiva la versión anterior. Desmarque esta opción si solo está corrigiendo un error de tipeo.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button type="submit" disabled={loading}>

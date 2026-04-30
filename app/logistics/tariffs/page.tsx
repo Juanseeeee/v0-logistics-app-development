@@ -108,6 +108,9 @@ export default function TariffsPage() {
   }
 
   const filteredTariffs = tariffs.filter((tariff) => {
+    // Solo mostrar tarifas activas en la lista principal (las inactivas/archivadas van al historial)
+    if (!tariff.active) return false
+
     if (filterClient !== "all" && (tariff.client_id || "all") !== filterClient) return false
     if (filterProduct !== "all" && (tariff.product_id || "all") !== filterProduct) return false
     if (filterOrigin !== "all") {
