@@ -4,7 +4,7 @@ import React, { useState, useMemo } from "react"
 import { L2Trip, TripGroup } from "@/types/l2-trip"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronRight, Edit, FileIcon, ChevronLeft, ListChecks } from "lucide-react"
+import { ChevronDown, ChevronRight, Edit, FileIcon, ChevronLeft, ListChecks, Trash2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
 
@@ -29,6 +29,7 @@ interface GroupedL2TripsTableProps {
   onExportTripPDF: (trip: L2Trip) => void
   onExportGroupPDF?: (group: TripGroup) => void
   onEditBlock: (blockId: string, type: "billing" | "settlement") => void
+  onDeleteBlock?: (blockId: string, type: "billing" | "settlement") => void
 }
 
 export function GroupedL2TripsTable({ 
@@ -40,7 +41,8 @@ export function GroupedL2TripsTable({
   onEditTrip, 
   onExportTripPDF,
   onExportGroupPDF,
-  onEditBlock 
+  onEditBlock,
+  onDeleteBlock
 }: GroupedL2TripsTableProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
@@ -222,24 +224,47 @@ export function GroupedL2TripsTable({
                       </TooltipProvider>
                     )}
                     {group.blockId && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-100" 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                onEditBlock(group.blockId!, activeTab === "l2_billed" ? "billing" : "settlement"); 
-                              }}
-                            >
-                              <ListChecks className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Editar Bloque</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-100" 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  onEditBlock(group.blockId!, activeTab === "l2_billed" ? "billing" : "settlement"); 
+                                }}
+                              >
+                                <ListChecks className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Editar Comprobante</p></TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
+                        {onDeleteBlock && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-100" 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    onDeleteBlock(group.blockId!, activeTab === "l2_billed" ? "billing" : "settlement"); 
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>Eliminar Comprobante</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </>
                     )}
                   </div>
                 </TableCell>

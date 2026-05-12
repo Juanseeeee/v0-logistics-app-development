@@ -688,6 +688,43 @@ export default function L2TripsPage() {
     setBulkEditDialogOpen(true)
   }
 
+  const handleDeleteBlock = async (blockId: string, type: 'billing' | 'settlement') => {
+    const textType = type === 'billing' ? 'facturación' : 'liquidación'
+    if (!confirm(`¿Está seguro de que desea eliminar este comprobante de ${textType}? Esto desvinculará los viajes y los devolverá a estado pendiente.`)) return
+    
+    const supabase = createClient()
+    const column = type === 'billing' ? 'bulk_billing_id' : 'bulk_settlement_id'
+    
+    const updateData: any = {}
+    
+    if (type === 'billing') {
+      updateData.bulk_billing_id = null
+      updateData.bulk_billing_date = null
+      updateData.client_invoice_number = null
+      updateData.client_invoice_date = null
+      updateData.client_payment_status = "PENDIENTE"
+      updateData.client_payment_date = null
+      updateData.client_invoice_passed = false
+    } else {
+      updateData.bulk_settlement_id = null
+      updateData.bulk_settlement_date = null
+      updateData.third_party_invoice = null
+      updateData.third_party_invoice_date = null
+      updateData.third_party_payment_status = "IMPAGO"
+      updateData.third_party_payment_date = null
+    }
+    
+    const { error } = await supabase.from("l2_trips").update(updateData).eq(column, blockId)
+    
+    if (error) {
+      toast.error(`Error al eliminar el comprobante de ${textType}`)
+      console.error(error)
+    } else {
+      toast.success(`Comprobante de ${textType} eliminado exitosamente`)
+      loadData()
+    }
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Cargando...</div>
   }
@@ -1251,6 +1288,7 @@ export default function L2TripsPage() {
                     onExportTripPDF={handleExportTripPDF}
                     onExportGroupPDF={(group) => generateGroupedTripsPDF([group], activeTab as "l2_billed" | "l2_settled")}
                     onEditBlock={handleEditBlock}
+                    onDeleteBlock={handleDeleteBlock}
                     selectedGroupIds={selectedGroups.map(g => g.id)}
                     onSelectGroup={(groupId, checked) => {
                       if (checked) {
@@ -1511,14 +1549,24 @@ export default function L2TripsPage() {
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                           {trip.bulk_billing_id && (
-                                            <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_billing_id!, "billing")}>
-                                              Editar Bloque Facturación
-                                            </DropdownMenuItem>
+                                            <>
+                                              <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_billing_id!, "billing")}>
+                                                Editar Bloque Facturación
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteBlock(trip.bulk_billing_id!, "billing")}>
+                                                Eliminar Bloque Facturación
+                                              </DropdownMenuItem>
+                                            </>
                                           )}
                                           {trip.bulk_settlement_id && (
-                                            <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_settlement_id!, "settlement")}>
-                                              Editar Bloque Liquidación
-                                            </DropdownMenuItem>
+                                            <>
+                                              <DropdownMenuItem onClick={() => handleEditBlock(trip.bulk_settlement_id!, "settlement")}>
+                                                Editar Bloque Liquidación
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteBlock(trip.bulk_settlement_id!, "settlement")}>
+                                                Eliminar Bloque Liquidación
+                                              </DropdownMenuItem>
+                                            </>
                                           )}
                                         </DropdownMenuContent>
                                       </DropdownMenu>
