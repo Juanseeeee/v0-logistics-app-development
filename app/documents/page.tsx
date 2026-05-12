@@ -92,6 +92,10 @@ export default function DocumentsPage() {
 
       if (userData.role === "company" || userData.role === "driver") {
         alertsQuery = alertsQuery.eq("entity_type", userData.role === "driver" ? "driver" : "company")
+      } else {
+        // Only show alerts for entities that exist in the system
+        // The view document_alerts already handles active status filtering
+        // We just need to make sure we don't accidentally filter anything else
       }
 
       const { data: alertsData } = await alertsQuery

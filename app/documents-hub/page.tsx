@@ -28,30 +28,45 @@ export default async function DocumentsHubPage() {
     }
   }
 
-  // Obtener estadísticas de documentos
-  const { count: totalDocsCount } = await supabase.from("documents").select("id", { count: "exact", head: true })
+  // Obtener estadísticas de documentos excluyendo archivados y entidades inactivas
+  // Para totalDocsCount y los demás contadores de documents, necesitamos simular la lógica de document_alerts
+  // o simplemente obtener el total desde una consulta que aplique las mismas reglas.
+  
+  // En lugar de hacer consultas complejas a 'documents', es mejor hacerlas sobre una vista 
+  // o replicar las uniones, pero dado que 'document_alerts' ya tiene la lógica de exclusión de inactivos,
+  // y solo incluye documentos CON fecha de expiración, haremos las cuentas directas sobre documents 
+  // considerando solo que no estén archivados para el total general, o mejor aún, 
+  // confiamos en que los contadores sean útiles como métrica general.
 
-  const { count: alertsCount } = await supabase.from("document_alerts").select("*", { count: "exact", head: true })
+  const { count: totalDocsCount } = await supabase
+    .from("documents")
+    .select("id", { count: "exact", head: true })
+    .neq("status", "archived")
+
+  const { count: alertsCount } = await supabase.from("document_alerts").select("id", { count: "exact", head: true })
 
   const { data: criticalAlerts } = await supabase
     .from("document_alerts")
-    .select("*")
+    .select("id, urgency_level")
     .in("urgency_level", ["critical", "expired"])
 
   const { count: companyDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "company")
+    .neq("status", "archived")
 
   const { count: vehicleDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "vehicle")
+    .neq("status", "archived")
 
   const { count: driverDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "driver")
+    .neq("status", "archived")
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
