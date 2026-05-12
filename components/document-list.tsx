@@ -122,7 +122,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
     `
 
     const buildQuery = (selectClause: string) => {
-      let query = supabase.from("documents").select(selectClause).eq("entity_type", entityType).neq("status", "archived").order("created_at", { ascending: false })
+      let query = supabase.from("documents").select(selectClause).eq("entity_type", entityType).order("created_at", { ascending: false })
 
       if (showCompanyOnly) {
         query = query.eq("company_user_id", userId)

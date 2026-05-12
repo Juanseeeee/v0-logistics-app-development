@@ -41,7 +41,6 @@ export default async function DocumentsHubPage() {
   const { count: totalDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
-    .neq("status", "archived")
 
   const { count: alertsCount } = await supabase.from("document_alerts").select("id", { count: "exact", head: true })
 
@@ -54,19 +53,16 @@ export default async function DocumentsHubPage() {
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "company")
-    .neq("status", "archived")
 
   const { count: vehicleDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "vehicle")
-    .neq("status", "archived")
 
   const { count: driverDocsCount } = await supabase
     .from("documents")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", "driver")
-    .neq("status", "archived")
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
