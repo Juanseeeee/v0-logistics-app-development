@@ -107,7 +107,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
       expiry_date,
       notes,
       created_at,
-      document_types!inner(name, alert_days_before)
+      document_types!inner(name)
     `
     const selectWithoutTransportCompany = `
       id,
@@ -118,7 +118,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
       expiry_date,
       notes,
       created_at,
-      document_types!inner(name, alert_days_before)
+      document_types!inner(name)
     `
 
     const buildQuery = (selectClause: string) => {
@@ -161,7 +161,6 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
         return {
           ...doc,
           document_type_name: doc.document_types.name,
-          alert_days_before: doc.document_types.alert_days_before,
           transport_company_id: doc.transport_company_id ?? null,
           transport_company_name: doc.transport_company_name ?? null,
           file_url: fileUrl,
@@ -211,7 +210,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
     }
   }
 
-  const getExpiryStatus = (expiryDate: string | null, alertDaysBefore: number = 15): ExpiryStatus | null => {
+  const getExpiryStatus = (expiryDate: string | null): ExpiryStatus | null => {
     if (!expiryDate) return null
     const today = new Date()
     const expiry = new Date(expiryDate)
@@ -226,7 +225,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
       }
     }
 
-    if (daysUntil <= alertDaysBefore) {
+    if (daysUntil <= 15) {
       return {
         key: "critical",
         label: `${daysUntil} días`,
@@ -235,7 +234,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
       }
     }
 
-    if (daysUntil <= (alertDaysBefore * 2)) {
+    if (daysUntil <= 30) {
       return {
         key: "warning",
         label: `${daysUntil} días`,
@@ -254,7 +253,7 @@ export function DocumentList({ userRole, userId, transportCompanies, statusFilte
 
   const filteredDocuments = documents.filter((doc) => {
     const search = searchTerm.toLowerCase()
-    const status = getExpiryStatus(doc.expiry_date, (doc as any).alert_days_before)
+    const status = getExpiryStatus(doc.expiry_date)
     const matchesSearch =
       doc.document_type_name?.toLowerCase().includes(search) ||
       doc.entity_name?.toLowerCase().includes(search) ||
@@ -537,7 +536,7 @@ function DocumentTable({
   tab: string
   onDelete: (id: string) => void
   onEdit: (doc: Document) => void
-  getExpiryStatus: (date: string | null, alertDaysBefore?: number) => ExpiryStatus | null
+  getExpiryStatus: (date: string | null) => ExpiryStatus | null
   transportCompanies: TransportCompany[]
   onBulkAssign: (docIds: string[], companyId: string, companyName: string) => Promise<void>
 }) {
@@ -645,7 +644,7 @@ function DocumentTable({
               </TableHeader>
               <TableBody>
                 {documents.map((doc) => {
-                  const status = getExpiryStatus(doc.expiry_date, (doc as any).alert_days_before)
+                  const status = getExpiryStatus(doc.expiry_date)
                   const isSelected = selectedIds.includes(doc.id)
                   return (
                     <TableRow key={doc.id} className={isSelected ? "bg-muted/50" : ""}>
