@@ -55,11 +55,11 @@ export function GroupedL2TripsTable({
       const invoiceNumber = isBilled ? trip.client_invoice_number : trip.third_party_invoice
       const clientOrTransport = isBilled 
         ? trip.clients?.company 
-        : trip.drivers?.transport_company?.name || trip.drivers?.name
+        : trip.third_party_transport || trip.drivers?.transport_company?.name || trip.drivers?.name
         
       const date = isBilled 
         ? (trip.client_invoice_date || trip.bulk_billing_date || trip.invoice_date)
-        : (trip.third_party_payment_date || trip.bulk_settlement_date || trip.invoice_date)
+        : (trip.third_party_invoice_date || trip.third_party_payment_date || trip.bulk_settlement_date || trip.invoice_date)
         
       const status = isBilled ? trip.client_payment_status : trip.third_party_payment_status
       
