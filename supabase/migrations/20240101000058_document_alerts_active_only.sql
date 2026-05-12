@@ -1,4 +1,4 @@
--- Update document_alerts view to only include active entities and non-archived documents
+-- Update document_alerts view to only include active entities and non-archived documents, using fixed alert days (15/30)
 
 DROP VIEW IF EXISTS document_alerts;
 
@@ -18,8 +18,8 @@ SELECT
   (d.expiry_date - CURRENT_DATE) AS days_until_expiry,
   CASE
     WHEN d.expiry_date < CURRENT_DATE THEN 'expired'
-    WHEN d.expiry_date <= CURRENT_DATE + (dt.alert_days_before || ' days')::INTERVAL THEN 'critical'
-    WHEN d.expiry_date <= CURRENT_DATE + ((dt.alert_days_before * 2) || ' days')::INTERVAL THEN 'warning'
+    WHEN d.expiry_date <= CURRENT_DATE + interval '15 days' THEN 'critical'
+    WHEN d.expiry_date <= CURRENT_DATE + interval '30 days' THEN 'warning'
     ELSE 'ok'
   END AS urgency_level
 FROM documents d
@@ -34,11 +34,11 @@ WHERE d.expiry_date IS NOT NULL
     (dt.entity_type = 'transport_company' AND tc.active = true) OR
     (dt.entity_type NOT IN ('vehicle', 'driver', 'transport_company'))
   )
-  AND d.expiry_date <= CURRENT_DATE + ((dt.alert_days_before * 2) || ' days')::INTERVAL
+  AND d.expiry_date <= CURRENT_DATE + interval '30 days'
 ORDER BY
   CASE
     WHEN d.expiry_date < CURRENT_DATE THEN 0
-    WHEN d.expiry_date <= CURRENT_DATE + (dt.alert_days_before || ' days')::INTERVAL THEN 1
+    WHEN d.expiry_date <= CURRENT_DATE + interval '15 days' THEN 1
     ELSE 2
   END,
   d.expiry_date ASC;
