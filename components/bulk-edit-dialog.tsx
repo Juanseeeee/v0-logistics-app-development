@@ -43,6 +43,7 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
   const [thirdPartyPaymentStatus, setThirdPartyPaymentStatus] = useState("")
   const [thirdPartyPaymentDate, setThirdPartyPaymentDate] = useState("")
   const [thirdPartyInvoice, setThirdPartyInvoice] = useState("")
+  const [thirdPartyInvoiceDate, setThirdPartyInvoiceDate] = useState("")
 
   useEffect(() => {
     if (open && selectedTripIds.length > 0) {
@@ -62,6 +63,7 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
     setThirdPartyPaymentStatus("")
     setThirdPartyPaymentDate("")
     setThirdPartyInvoice("")
+    setThirdPartyInvoiceDate("")
     setErrorLog([])
     setProgress(0)
     setTripsData([])
@@ -103,6 +105,9 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
 
       const tpInvoices = [...new Set(data.map(d => d.third_party_invoice).filter(Boolean))]
       if (tpInvoices.length === 1) setThirdPartyInvoice(tpInvoices[0])
+
+      const tpInvDates = [...new Set(data.map(d => d.third_party_invoice_date).filter(Boolean))]
+      if (tpInvDates.length === 1) setThirdPartyInvoiceDate(tpInvDates[0])
     }
     setLoading(false)
   }
@@ -193,6 +198,7 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
       if (thirdPartyPaymentStatus) updateData.third_party_payment_status = thirdPartyPaymentStatus
       if (thirdPartyPaymentDate) updateData.third_party_payment_date = thirdPartyPaymentDate
       if (thirdPartyInvoice) updateData.third_party_invoice = thirdPartyInvoice
+      if (thirdPartyInvoiceDate) updateData.third_party_invoice_date = thirdPartyInvoiceDate
     }
 
       // Process single transactional update
@@ -410,15 +416,27 @@ export function BulkEditDialog({ open, onOpenChange, selectedTripIds, onSuccess,
                 </div>
               </div>
 
-               <div className="space-y-2">
-                <Label htmlFor="tp-payment-date">Fecha de Pago</Label>
-                <Input
-                  id="tp-payment-date"
-                  type="date"
-                  value={thirdPartyPaymentDate}
-                  onChange={(e) => setThirdPartyPaymentDate(e.target.value)}
-                  disabled={loading}
-                />
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                  <Label htmlFor="tp-invoice-date">Fecha del Comprobante</Label>
+                  <Input
+                    id="tp-invoice-date"
+                    type="date"
+                    value={thirdPartyInvoiceDate}
+                    onChange={(e) => setThirdPartyInvoiceDate(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tp-payment-date">Fecha de Pago</Label>
+                  <Input
+                    id="tp-payment-date"
+                    type="date"
+                    value={thirdPartyPaymentDate}
+                    onChange={(e) => setThirdPartyPaymentDate(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
               </div>
             </div>
           )}

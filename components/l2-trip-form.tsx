@@ -83,6 +83,7 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     third_party_rate: trip?.third_party_rate || "",
     third_party_amount: trip?.third_party_amount || "",
     third_party_invoice: trip?.third_party_invoice || "",
+    third_party_invoice_date: trip?.third_party_invoice_date || "",
     third_party_payment_date: trip?.third_party_payment_date || "",
     third_party_payment_status: trip?.third_party_payment_status || "IMPAGO",
     client_invoice_passed: trip?.client_invoice_passed || false,
@@ -1086,6 +1087,15 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
                 id="third_party_invoice"
                 value={formData.third_party_invoice}
                 onChange={(e) => setFormData({ ...formData, third_party_invoice: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="third_party_invoice_date">Fecha del Comprobante</Label>
+              <Input
+                id="third_party_invoice_date"
+                type="date"
+                value={formData.third_party_invoice_date}
+                onChange={(e) => setFormData({ ...formData, third_party_invoice_date: e.target.value })}
               />
             </div>
           </div>

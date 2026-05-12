@@ -81,6 +81,7 @@ export interface L2Trip {
   client_fca_number?: string;
   
   third_party_invoice?: string;
+  third_party_invoice_date?: string;
   third_party_payment_date?: string;
   third_party_payment_status?: string;
 
