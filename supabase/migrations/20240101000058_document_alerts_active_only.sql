@@ -29,7 +29,7 @@ LEFT JOIN drivers dr ON d.entity_id::text = dr.id::text AND dt.entity_type = 'dr
 LEFT JOIN transport_companies tc ON d.entity_id::text = tc.id::text AND dt.entity_type = 'transport_company'
 WHERE d.expiry_date IS NOT NULL
   AND (
-    (dt.entity_type = 'vehicle' AND v.active = true) OR
+    (dt.entity_type = 'vehicle') OR
     (dt.entity_type = 'driver' AND dr.active = true) OR
     (dt.entity_type = 'transport_company' AND tc.active = true) OR
     (dt.entity_type NOT IN ('vehicle', 'driver', 'transport_company'))
