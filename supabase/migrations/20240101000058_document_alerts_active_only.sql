@@ -24,14 +24,14 @@ SELECT
   END AS urgency_level
 FROM documents d
 JOIN document_types dt ON d.document_type_id = dt.id
-LEFT JOIN vehicles v ON d.entity_id = v.id::text AND dt.entity_type = 'vehicle'
-LEFT JOIN drivers dr ON d.entity_id = dr.id::text AND dt.entity_type = 'driver'
-LEFT JOIN transport_companies tc ON d.entity_id = tc.id::text AND dt.entity_type = 'transport_company'
+LEFT JOIN vehicles v ON d.entity_id::text = v.id::text AND dt.entity_type = 'vehicle'
+LEFT JOIN drivers dr ON d.entity_id::text = dr.id::text AND dt.entity_type = 'driver'
+LEFT JOIN transport_companies tc ON d.entity_id::text = tc.id::text AND dt.entity_type = 'transport_company'
 WHERE d.expiry_date IS NOT NULL
   AND (
-    (dt.entity_type = 'vehicle' AND v.active = true) OR
-    (dt.entity_type = 'driver' AND dr.active = true) OR
-    (dt.entity_type = 'transport_company' AND tc.active = true) OR
+    (dt.entity_type = 'vehicle') OR
+    (dt.entity_type = 'driver' AND (dr.active = true OR d.entity_id IS NULL)) OR
+    (dt.entity_type = 'transport_company' AND (tc.active = true OR d.entity_id IS NULL)) OR
     (dt.entity_type NOT IN ('vehicle', 'driver', 'transport_company'))
   )
   AND d.expiry_date <= CURRENT_DATE + interval '30 days'
