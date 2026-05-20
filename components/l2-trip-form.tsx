@@ -340,6 +340,25 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     setPendingTariff(null)
   }
 
+  const isMissingThirdPartyInvoiceDateColumn = (error: any) => {
+    return error?.code === "PGRST204" && String(error?.message || "").includes("third_party_invoice_date")
+  }
+
+  const sanitizeDateFields = (payload: Record<string, any>) => {
+    const next = { ...payload }
+
+    Object.keys(next).forEach((field) => {
+      const isDateField = field === "invoice_date" || field === "payment_date" || field.endsWith("_date")
+      if (!isDateField) return
+
+      if (typeof next[field] === "string" && next[field].trim() === "") {
+        next[field] = null
+      }
+    })
+
+    return next
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -348,21 +367,8 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
     const supabase = createClient()
 
     try {
-      const { _isPromotion, _shouldLookupTariff, _l1Trip, ...cleanData } = formData as any
-
-      const dateFields = [
-        "invoice_date",
-        "payment_date",
-        "client_invoice_date",
-        "client_payment_date",
-        "third_party_payment_date",
-      ]
-
-      dateFields.forEach((field) => {
-        if (cleanData[field] === "" || cleanData[field] === undefined) {
-          cleanData[field] = null
-        }
-      })
+      const { _isPromotion, _shouldLookupTariff, _l1Trip, ...rawData } = formData as any
+      const cleanData = sanitizeDateFields(rawData)
 
       const numericFields = [
         "tare_origin",
@@ -387,19 +393,31 @@ export function L2TripForm({ trip, clients, drivers, onSuccess }: L2TripFormProp
 
       if (trip && !trip._isPromotion) {
         // Update existing L2 trip
-        const { error } = await supabase
+        const updatePayload = {
+          ...cleanData,
+          updated_at: new Date().toISOString(),
+        }
+
+        let { error } = await supabase
           .from("l2_trips")
-          .update({
-            ...cleanData,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq("id", trip.id)
+
+        if (isMissingThirdPartyInvoiceDateColumn(error)) {
+          const { third_party_invoice_date, ...fallbackPayload } = updatePayload as any
+          ;({ error } = await supabase.from("l2_trips").update(fallbackPayload).eq("id", trip.id))
+        }
 
         if (error) throw error
         toast.success("Viaje L2 actualizado exitosamente")
       } else {
         // Create new L2 trip (including promotions from L1)
-        const { error } = await supabase.from("l2_trips").insert([cleanData])
+        let { error } = await supabase.from("l2_trips").insert([cleanData])
+
+        if (isMissingThirdPartyInvoiceDateColumn(error)) {
+          const { third_party_invoice_date, ...fallbackData } = cleanData as any
+          ;({ error } = await supabase.from("l2_trips").insert([fallbackData]))
+        }
 
         if (error) throw error
         toast.success("Viaje L2 creado exitosamente")
