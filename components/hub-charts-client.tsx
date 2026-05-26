@@ -7,12 +7,18 @@ import { Badge } from "@/components/ui/badge"
 interface HubChartsClientProps {
   monthlyFuelData: any[]
   clientProfitData: any[]
+  canViewClientProfitChart: boolean
   upcomingMaintenances: any[]
 }
 
-export function HubChartsClient({ monthlyFuelData, clientProfitData, upcomingMaintenances }: HubChartsClientProps) {
+export function HubChartsClient({
+  monthlyFuelData,
+  clientProfitData,
+  canViewClientProfitChart,
+  upcomingMaintenances,
+}: HubChartsClientProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 max-w-5xl mx-auto mt-8">
+    <div className={`grid grid-cols-1 ${canViewClientProfitChart ? "lg:grid-cols-2" : ""} gap-4 sm:gap-8 max-w-5xl mx-auto mt-8`}>
       {/* Monthly Fuel Costs */}
       <Card className="col-span-1 shadow-md">
         <CardHeader>
@@ -56,43 +62,45 @@ export function HubChartsClient({ monthlyFuelData, clientProfitData, upcomingMai
       </Card>
 
       {/* Profits by Client */}
-      <Card className="col-span-1 shadow-md">
-        <CardHeader>
-          <CardTitle className="text-xl">Ganancias por Cliente</CardTitle>
-          <CardDescription>Top 5 clientes con mayor rentabilidad</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={clientProfitData} layout="vertical" margin={{ left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.2} />
-                <XAxis 
-                  type="number"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `$${value.toLocaleString()}`}
-                />
-                <YAxis 
-                  dataKey="name" 
-                  type="category"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  width={100}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, "Ganancia"]}
-                  contentStyle={{ backgroundColor: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
-                />
-                <Bar dataKey="Ganancia" fill="#10b981" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {canViewClientProfitChart && (
+        <Card className="col-span-1 shadow-md">
+          <CardHeader>
+            <CardTitle className="text-xl">Ganancias por Cliente</CardTitle>
+            <CardDescription>Top 5 clientes con mayor rentabilidad</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={clientProfitData} layout="vertical" margin={{ left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.2} />
+                  <XAxis 
+                    type="number"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `$${value.toLocaleString()}`}
+                  />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    width={100}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, "Ganancia"]}
+                    contentStyle={{ backgroundColor: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
+                  />
+                  <Bar dataKey="Ganancia" fill="#10b981" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming Maintenances */}
       <Card className="col-span-1 lg:col-span-2 shadow-md">

@@ -1,7 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
 import { HubChartsClient } from "./hub-charts-client"
 
-export async function HubDashboard() {
+interface HubDashboardProps {
+  canViewClientProfitChart: boolean
+}
+
+export async function HubDashboard({ canViewClientProfitChart }: HubDashboardProps) {
   const supabase = await createClient()
 
   // 1. Fetch fuel records for the last 6 months
@@ -14,12 +18,17 @@ export async function HubDashboard() {
     .gte("date", sixMonthsAgo.toISOString().split("T")[0])
 
   // 2. Fetch trips for client profits and general stats
-  const { data: trips, error: tripsError } = await supabase
-    .from("l2_trips")
-    .select("client_id, trip_amount, third_party_amount, invoice_date, payment_date, tons_delivered, clients(company)")
+  let trips: any[] | null = null
+  if (canViewClientProfitChart) {
+    const { data: tripsData, error: tripsError } = await supabase
+      .from("l2_trips")
+      .select("client_id, trip_amount, third_party_amount, invoice_date, payment_date, tons_delivered, clients(company)")
 
-  if (tripsError) {
-    console.error("Error fetching l2_trips:", tripsError)
+    if (tripsError) {
+      console.error("Error fetching l2_trips:", tripsError)
+    } else {
+      trips = tripsData
+    }
   }
 
   // 3. Fetch upcoming maintenance alerts
@@ -70,6 +79,7 @@ export async function HubDashboard() {
     <HubChartsClient 
       monthlyFuelData={monthlyFuelData} 
       clientProfitData={clientProfitData} 
+      canViewClientProfitChart={canViewClientProfitChart}
       upcomingMaintenances={maintenanceAlerts || []} 
     />
   )
