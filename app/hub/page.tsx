@@ -26,6 +26,7 @@ export default async function DashboardPage() {
   }
 
   const userRole = userData.role
+  const canViewClientProfitChart = user.email?.toLowerCase() === "clamelza@logisticacronos.com.ar"
 
   if (userRole === "driver") {
     redirect("/documents")
@@ -299,7 +300,7 @@ export default async function DashboardPage() {
         {(userRole === "admin" || userRole === "owner" || userRole === "manager") && (
           <div className="mt-12">
             <h3 className="text-2xl font-bold text-center mb-6">Métricas y Alertas Principales</h3>
-            <HubDashboard />
+            <HubDashboard canViewClientProfitChart={canViewClientProfitChart} />
           </div>
         )}
       </div>
