@@ -36,6 +36,7 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
   const router = useRouter()
   const [deleting, setDeleting] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
+  const totalRecordsCount = fuelRecords.length
 
   // Filter states
   const [dateFrom, setDateFrom] = useState("")
@@ -142,6 +143,8 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
     }
   }, [filteredRecords])
 
+  const isShowingAllRecords = stats.totalRecords === totalRecordsCount
+
   const handleDelete = async (id: string) => {
     if (!confirm("¿Estás seguro de eliminar este registro?")) return
 
@@ -246,15 +249,15 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
               </Select>
             </div>
 
-            {/* Product Type Filter */}
+            {/* Fuel Type Filter */}
             <div className="space-y-2">
-              <Label>Tipo de Producto</Label>
+              <Label>Tipo de Combustible</Label>
               <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">Todos los tipos</SelectItem>
                   {uniqueProducts.map((product) => (
                     <SelectItem key={product} value={product}>
                       {product}
@@ -376,7 +379,15 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Registros</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRecords}</div>
+            <div className="text-2xl font-bold">
+              {stats.totalRecords}
+              <span className="text-base font-medium text-muted-foreground"> / {totalRecordsCount}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isShowingAllRecords
+                ? "Mostrando la totalidad de los registros"
+                : `Mostrando ${stats.totalRecords} de ${totalRecordsCount} registros`}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -405,6 +416,19 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
         </Card>
       </div>
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          {isShowingAllRecords
+            ? `Se muestran los ${totalRecordsCount} registros cargados.`
+            : `Se muestran ${stats.totalRecords} de ${totalRecordsCount} registros según los filtros aplicados.`}
+        </p>
+        {selectedProduct !== "all" && (
+          <Badge variant="secondary" className="w-fit">
+            Tipo de combustible: {selectedProduct}
+          </Badge>
+        )}
+      </div>
+
       {/* Records List */}
       {filteredRecords.length === 0 ? (
         <Card>
@@ -424,7 +448,7 @@ export function FuelRecordListFiltered({ fuelRecords }: { fuelRecords: FuelRecor
                     <TableHead>Fecha</TableHead>
                     <TableHead>Conductor</TableHead>
                     <TableHead>Vehículo</TableHead>
-                    <TableHead>Producto</TableHead>
+                    <TableHead>Combustible</TableHead>
                     <TableHead className="text-right">Litros</TableHead>
                     <TableHead className="text-right">Precio/L</TableHead>
                     <TableHead className="text-right">Costo</TableHead>

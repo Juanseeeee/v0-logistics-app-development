@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,21 +31,50 @@ type Props = {
   documentTypes: DocumentType[]
   transportCompanies: TransportCompany[]
   onSuccess?: () => void
+  presetDocumentTypeId?: string
+  lockDocumentType?: boolean
+  defaultTransportCompanyId?: string
+  defaultTransportCompanyName?: string
+  defaultEntityName?: string
+  defaultEntityId?: string
+  hideTransportCompanyField?: boolean
+  hideEntityNameField?: boolean
+  title?: string
+  description?: string
+  submitLabel?: string
 }
 
-export function DocumentUploadForm({ userRole, userId, documentTypes, transportCompanies, onSuccess }: Props) {
+export function DocumentUploadForm({
+  userRole,
+  userId,
+  documentTypes,
+  transportCompanies,
+  onSuccess,
+  presetDocumentTypeId,
+  lockDocumentType = false,
+  defaultTransportCompanyId,
+  defaultTransportCompanyName,
+  defaultEntityName,
+  defaultEntityId,
+  hideTransportCompanyField = false,
+  hideEntityNameField = false,
+  title = "Subir Nuevo Documento",
+  description = "Complete la información del documento y seleccione el archivo a subir",
+  submitLabel = "Subir Documento",
+}: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [hasNoExpiry, setHasNoExpiry] = useState(false)
-  const [formData, setFormData] = useState({
-    documentTypeId: "",
-    transportCompanyId: "",
-    entityName: "",
+  const buildInitialFormData = () => ({
+    documentTypeId: presetDocumentTypeId || "",
+    transportCompanyId: defaultTransportCompanyId || "",
+    entityName: defaultEntityName || "",
     issueDate: "",
     expiryDate: "",
     notes: "",
   })
+  const [formData, setFormData] = useState(buildInitialFormData)
 
   // Filtrar tipos de documento según rol
   const availableDocTypes = documentTypes.filter((dt) => {
@@ -57,6 +86,12 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
     }
     return true // admin, owner, manager, documents, fleet_docs ven todos
   })
+
+  useEffect(() => {
+    setFormData(buildInitialFormData())
+    setFile(null)
+    setHasNoExpiry(false)
+  }, [presetDocumentTypeId, defaultTransportCompanyId, defaultEntityName])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -95,11 +130,14 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
 
       // Insertar documento en la base de datos
       const selectedDocType = documentTypes.find((dt) => dt.id === formData.documentTypeId)
-      const selectedTransportCompany = transportCompanies.find((company) => company.id === formData.transportCompanyId)
+      const resolvedTransportCompanyId = formData.transportCompanyId || defaultTransportCompanyId || ""
+      const selectedTransportCompany = transportCompanies.find((company) => company.id === resolvedTransportCompanyId)
+      const resolvedEntityName = formData.entityName || defaultEntityName || null
       const documentPayload: Record<string, any> = {
         document_type_id: formData.documentTypeId,
         entity_type: selectedDocType?.entity_type || "company",
-        entity_name: formData.entityName || null,
+        entity_id: defaultEntityId || null,
+        entity_name: resolvedEntityName,
         file_url: filePath,
         file_name: file.name,
         file_size: file.size,
@@ -110,9 +148,9 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
         company_user_id: userRole === "company" || userRole === "driver" ? userId : null,
       }
 
-      if (formData.transportCompanyId) {
-        documentPayload.transport_company_id = formData.transportCompanyId
-        documentPayload.transport_company_name = selectedTransportCompany?.name || null
+      if (resolvedTransportCompanyId) {
+        documentPayload.transport_company_id = resolvedTransportCompanyId
+        documentPayload.transport_company_name = selectedTransportCompany?.name || defaultTransportCompanyName || null
       }
 
       const { error } = await supabase.from("documents").insert(documentPayload)
@@ -124,14 +162,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
       // Resetear formulario
       setFile(null)
       setHasNoExpiry(false)
-      setFormData({
-        documentTypeId: "",
-        transportCompanyId: "",
-        entityName: "",
-        issueDate: "",
-        expiryDate: "",
-        notes: "",
-      })
+      setFormData(buildInitialFormData())
 
       if (onSuccess) {
         onSuccess()
@@ -151,9 +182,9 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="h-5 w-5" />
-          Subir Nuevo Documento
+          {title}
         </CardTitle>
-        <CardDescription>Complete la información del documento y seleccione el archivo a subir</CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -163,7 +194,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
             <Select
               value={formData.documentTypeId}
               onValueChange={(value) => setFormData({ ...formData, documentTypeId: value })}
-              required
+              disabled={lockDocumentType}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Seleccione el tipo de documento" />
@@ -178,28 +209,30 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="transportCompany">Fletero</Label>
-            <Select
-              value={formData.transportCompanyId || "none"}
-              onValueChange={(value) => setFormData({ ...formData, transportCompanyId: value === "none" ? "" : value })}
-            >
-              <SelectTrigger id="transportCompany">
-                <SelectValue placeholder="Seleccione un fletero" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sin fletero asignado</SelectItem>
-                {transportCompanies.map((company) => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!hideTransportCompanyField && (
+            <div className="space-y-2">
+              <Label htmlFor="transportCompany">Fletero</Label>
+              <Select
+                value={formData.transportCompanyId || "none"}
+                onValueChange={(value) => setFormData({ ...formData, transportCompanyId: value === "none" ? "" : value })}
+              >
+                <SelectTrigger id="transportCompany">
+                  <SelectValue placeholder="Seleccione un fletero" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin fletero asignado</SelectItem>
+                  {transportCompanies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Nombre de Entidad (opcional para company) */}
-          {userRole !== "company" && userRole !== "driver" && (
+          {!hideEntityNameField && userRole !== "company" && userRole !== "driver" && (
             <div className="space-y-2">
               <Label htmlFor="entityName">Nombre de Entidad</Label>
               <Input
@@ -316,7 +349,7 @@ export function DocumentUploadForm({ userRole, userId, documentTypes, transportC
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Subir Documento
+                {submitLabel}
               </>
             )}
           </Button>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, AlertTriangle, FileText, ChevronDown, ChevronUp, LogOut, Clock3 } from "lucide-react"
 import { DocumentList } from "@/components/document-list"
 import { DocumentUploadForm } from "@/components/document-upload-form"
+import { DriverDocumentChecklist } from "@/components/driver-document-checklist"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -231,35 +232,46 @@ export default function DocumentsPage() {
 
         {/* Formulario de carga */}
         <div className="mb-6">
-          <Button
-            onClick={() => setShowUploadForm(!showUploadForm)}
-            className="w-full mb-4"
-            variant={showUploadForm ? "outline" : "default"}
-          >
-            {showUploadForm ? (
-              <>
-                <ChevronUp className="mr-2 h-4 w-4" />
-                Ocultar Formulario
-              </>
-            ) : (
-              <>
-                <ChevronDown className="mr-2 h-4 w-4" />
-                Subir Nuevo Documento
-              </>
-            )}
-          </Button>
-
-          {showUploadForm && (
-            <DocumentUploadForm
-              userRole={userRole || ""}
+          {userRole === "driver" ? (
+            <DriverDocumentChecklist
               userId={userId || ""}
               documentTypes={documentTypes}
               transportCompanies={transportCompanies}
-              onSuccess={() => {
-                setRefreshKey((k) => k + 1)
-                setShowUploadForm(false)
-              }}
+              onSuccess={() => setRefreshKey((k) => k + 1)}
             />
+          ) : (
+            <>
+              <Button
+                onClick={() => setShowUploadForm(!showUploadForm)}
+                className="w-full mb-4"
+                variant={showUploadForm ? "outline" : "default"}
+              >
+                {showUploadForm ? (
+                  <>
+                    <ChevronUp className="mr-2 h-4 w-4" />
+                    Ocultar Formulario
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="mr-2 h-4 w-4" />
+                    Subir Nuevo Documento
+                  </>
+                )}
+              </Button>
+
+              {showUploadForm && (
+                <DocumentUploadForm
+                  userRole={userRole || ""}
+                  userId={userId || ""}
+                  documentTypes={documentTypes}
+                  transportCompanies={transportCompanies}
+                  onSuccess={() => {
+                    setRefreshKey((k) => k + 1)
+                    setShowUploadForm(false)
+                  }}
+                />
+              )}
+            </>
           )}
         </div>
 

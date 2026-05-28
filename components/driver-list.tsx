@@ -8,7 +8,19 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trash2, Power, PowerOff, Search, ChevronLeft, ChevronRight, Unlock, Pencil, RefreshCw, Users } from "lucide-react"
+import {
+  Trash2,
+  Power,
+  PowerOff,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Unlock,
+  Pencil,
+  RefreshCw,
+  Users,
+  KeyRound,
+} from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 
@@ -47,6 +59,7 @@ export function DriverList({
 }) {
   const router = useRouter()
   const [updating, setUpdating] = useState<string | null>(null)
+  const canManageDriverPasswords = userRole === "admin" || userRole === "owner" || userRole === "manager"
 
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -167,6 +180,48 @@ export function DriverList({
     } catch (error) {
       console.error("Error:", error)
       alert("Error al desbloquear chofer")
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  const handleResetPassword = async (driver: Driver) => {
+    const cleanCuit = driver.cuit.replace(/[^0-9]/g, "")
+
+    if (cleanCuit.length !== 11) {
+      alert("El chofer no tiene un CUIT valido para restablecer la contraseña")
+      return
+    }
+
+    const confirmed = confirm(
+      `¿Restablecer la contraseña del chofer ${driver.name}?\n\nLa contraseña temporal volverá a ser su CUIT (${cleanCuit}) y deberá cambiarla al ingresar.`,
+    )
+
+    if (!confirmed) return
+
+    setUpdating(driver.id)
+    try {
+      const response = await fetch("/api/admin/reset-driver-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ driverId: driver.id }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al restablecer la contraseña")
+      }
+
+      alert(
+        `Contraseña restablecida correctamente.\n\nUsuario: ${data.loginIdentifier}\nContraseña temporal: ${data.temporaryPassword}\n\nEl sistema solicitará cambiarla al ingresar.`,
+      )
+      router.refresh()
+    } catch (error: any) {
+      console.error("Error:", error)
+      alert(`Error al restablecer contraseña: ${error.message}`)
     } finally {
       setUpdating(null)
     }
@@ -345,6 +400,19 @@ export function DriverList({
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
+
+                    {canManageDriverPasswords && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleResetPassword(driver)}
+                        disabled={updating === driver.id}
+                        title="Restablecer contraseña al CUIT"
+                        className="border-[#0038ae] text-[#0038ae] hover:bg-[#0038ae]/10"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                    )}
 
                     <Button
                       variant="outline"
