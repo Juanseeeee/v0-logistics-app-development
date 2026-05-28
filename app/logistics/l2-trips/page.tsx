@@ -201,6 +201,26 @@ export default function L2TripsPage() {
     }, 0)
   }, [selectedTrips, l2Trips])
 
+  const selectedGroupsTotalAmount = useMemo(() => {
+    return selectedGroups.reduce((total, group) => total + (Number(group.amount) || 0), 0)
+  }, [selectedGroups])
+
+  const uniqueFleteros = useMemo(() => {
+    const fleteros = new Set<string>()
+
+    l2Trips.forEach((trip) => {
+      const fletero = trip.third_party_transport || trip.drivers?.transport_company?.name
+      if (fletero?.trim()) fleteros.add(fletero.trim())
+    })
+
+    l1Trips.forEach((trip: any) => {
+      const fletero = trip.transport_company || trip.driver?.transport_company?.name
+      if (fletero?.trim()) fleteros.add(fletero.trim())
+    })
+
+    return Array.from(fleteros).sort((a, b) => a.localeCompare(b, "es"))
+  }, [l1Trips, l2Trips])
+
   const filteredTrips = useMemo(() => {
     let filtered = [...l2Trips]
 
@@ -212,7 +232,9 @@ export default function L2TripsPage() {
           trip.clients?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.origin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.destination?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          trip.drivers?.name?.toLowerCase().includes(searchTerm.toLowerCase()),
+          trip.drivers?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.third_party_transport?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.drivers?.transport_company?.name?.toLowerCase().includes(searchTerm.toLowerCase()),
       )
     }
 
@@ -259,10 +281,11 @@ export default function L2TripsPage() {
     }
 
     // Third Party Transport
-    if (thirdPartyTransportFilter) {
-      filtered = filtered.filter((trip) => 
-        trip.third_party_transport?.toLowerCase().includes(thirdPartyTransportFilter.toLowerCase())
-      )
+    if (thirdPartyTransportFilter && thirdPartyTransportFilter !== "all") {
+      filtered = filtered.filter((trip) => {
+        const fletero = trip.third_party_transport || trip.drivers?.transport_company?.name || ""
+        return fletero === thirdPartyTransportFilter
+      })
     }
 
     // Third Party Invoice
@@ -342,6 +365,7 @@ export default function L2TripsPage() {
           trip.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.product?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          trip.transport_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.loading_location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           trip.unloading_location?.toLowerCase().includes(searchTerm.toLowerCase()),
       )
@@ -373,6 +397,13 @@ export default function L2TripsPage() {
       filtered = filtered.filter((trip) => trip.driver_id === driverFilter || trip.driver?.id === driverFilter)
     }
 
+    if (thirdPartyTransportFilter && thirdPartyTransportFilter !== "all") {
+      filtered = filtered.filter((trip: any) => {
+        const fletero = trip.transport_company || trip.driver?.transport_company?.name || ""
+        return fletero === thirdPartyTransportFilter
+      })
+    }
+
     if (dateFrom) {
       filtered = filtered.filter((trip) => trip.date >= dateFrom)
     }
@@ -389,6 +420,7 @@ export default function L2TripsPage() {
     originFilter,
     destinationFilter,
     driverFilter,
+    thirdPartyTransportFilter,
     dateFrom,
     dateTo,
     clients,
@@ -526,6 +558,25 @@ export default function L2TripsPage() {
     if (selectedGroups.length === 0) return
     await generateGroupedTripsPDF(selectedGroups, activeTab as "l2_billed" | "l2_settled")
     toast.success("PDF generado exitosamente")
+  }
+
+  const buildGroupMetadata = (trip: L2Trip, isBilled: boolean) => {
+    const invoiceNumber = isBilled ? trip.client_invoice_number : trip.third_party_invoice
+    const clientOrTransport = isBilled
+      ? trip.clients?.company
+      : trip.third_party_transport || trip.drivers?.transport_company?.name || trip.drivers?.name
+    const groupId = `${invoiceNumber || "SIN-COMP"}-${clientOrTransport || "SIN-CLI"}`
+
+    return {
+      groupId,
+      invoiceNumber: invoiceNumber || "Sin Comprobante",
+      clientOrTransport: clientOrTransport || "Sin Especificar",
+      date: isBilled
+        ? (trip.client_invoice_date || trip.bulk_billing_date || trip.invoice_date)
+        : (trip.third_party_invoice_date || trip.third_party_payment_date || trip.bulk_settlement_date || trip.invoice_date),
+      status: isBilled ? trip.client_payment_status : trip.third_party_payment_status,
+      blockId: isBilled ? trip.bulk_billing_id : trip.bulk_settlement_id,
+    }
   }
 
   const toggleSort = () => {
@@ -760,9 +811,14 @@ export default function L2TripsPage() {
 
       <div className="container mx-auto px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
         <div className="flex flex-wrap justify-end items-center gap-2">
-          {selectedTrips.length > 0 && activeTab !== "pending" && (
+          {selectedTrips.length > 0 && activeTab !== "pending" && activeTab !== "l2_billed" && activeTab !== "l2_settled" && (
             <div className="mr-auto px-4 py-2 bg-blue-50 text-blue-800 rounded-md border border-blue-200 font-semibold">
               Total Seleccionado: ${selectedTripsTotalAmount.toLocaleString("es-AR")}
+            </div>
+          )}
+          {selectedGroups.length > 0 && (activeTab === "l2_billed" || activeTab === "l2_settled") && (
+            <div className="mr-auto px-4 py-2 bg-blue-50 text-blue-800 rounded-md border border-blue-200 font-semibold">
+              Total Seleccionado: ${selectedGroupsTotalAmount.toLocaleString("es-AR")}
             </div>
           )}
           {selectedGroups.length > 0 && (activeTab === "l2_billed" || activeTab === "l2_settled") && (
@@ -856,7 +912,7 @@ export default function L2TripsPage() {
               <div className="relative w-full sm:max-w-md">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por N° Viaje, Cliente, Origen, Destino, Chofer, Producto..."
+                  placeholder="Buscar por N° Viaje, Cliente, Origen, Destino, Chofer, Fletero, Producto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8"
@@ -925,7 +981,7 @@ export default function L2TripsPage() {
                     </div>
 
                     <div className="border-t pt-4">
-                      <h3 className="text-base font-semibold mb-3">Cliente y Chofer</h3>
+                      <h3 className="text-base font-semibold mb-3">Cliente, Chofer y Fletero</h3>
                       <div className="grid grid-cols-4 gap-4">
                         <Select value={clientFilter} onValueChange={setClientFilter}>
                           <SelectTrigger>
@@ -954,6 +1010,20 @@ export default function L2TripsPage() {
                             ))}
                           </SelectContent>
                         </Select>
+
+                        <Select value={thirdPartyTransportFilter || "all"} onValueChange={setThirdPartyTransportFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Fletero" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los fleteros</SelectItem>
+                            {uniqueFleteros.map((fletero) => (
+                              <SelectItem key={fletero} value={fletero}>
+                                {fletero}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
@@ -967,6 +1037,7 @@ export default function L2TripsPage() {
                           setOriginFilter("all")
                           setDestinationFilter("all")
                           setDriverFilter("all")
+                          setThirdPartyTransportFilter("all")
                           setDateFrom("")
                           setDateTo("")
                         }}
@@ -989,6 +1060,7 @@ export default function L2TripsPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Chofer</TableHead>
+                      <TableHead>Fletero</TableHead>
                       <TableHead>Origen</TableHead>
                       <TableHead>Destino</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -997,7 +1069,7 @@ export default function L2TripsPage() {
                   <TableBody>
                     {filteredL1Trips.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           No hay viajes pendientes de completar
                         </TableCell>
                       </TableRow>
@@ -1009,6 +1081,7 @@ export default function L2TripsPage() {
                           <TableCell>{trip.client_name}</TableCell>
                           <TableCell>{trip.product}</TableCell>
                           <TableCell>{trip.driver?.name}</TableCell>
+                          <TableCell>{(trip as any).transport_company || "-"}</TableCell>
                           <TableCell>{trip.loading_location}</TableCell>
                           <TableCell>{trip.unloading_location}</TableCell>
                           <TableCell className="text-right">
@@ -1066,7 +1139,7 @@ export default function L2TripsPage() {
               <div className="relative w-full sm:max-w-md">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por RTO, Cliente, Origen, Destino, Chofer..."
+                  placeholder="Buscar por RTO, Cliente, Origen, Destino, Chofer, Fletero..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8"
@@ -1190,12 +1263,6 @@ export default function L2TripsPage() {
                     <div className="border-t pt-4">
                       <h3 className="text-base font-semibold mb-3">Filtros Terceros</h3>
                       <div className="grid grid-cols-4 gap-4">
-                         <Input 
-                          placeholder="Transporte" 
-                          value={thirdPartyTransportFilter} 
-                          onChange={(e) => setThirdPartyTransportFilter(e.target.value)} 
-                        />
-
                         <Input 
                           placeholder="N° Comp. Tercero" 
                           value={thirdPartyInvoiceFilter} 
@@ -1206,6 +1273,20 @@ export default function L2TripsPage() {
                           <span className="text-xs text-muted-foreground">Fecha Comp. Tercero</span>
                           <Input type="date" value={thirdPartyPaymentDateFilter} onChange={(e) => setThirdPartyPaymentDateFilter(e.target.value)} />
                         </div>
+
+                        <Select value={thirdPartyTransportFilter || "all"} onValueChange={setThirdPartyTransportFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Fletero" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los fleteros</SelectItem>
+                            {uniqueFleteros.map((fletero) => (
+                              <SelectItem key={fletero} value={fletero}>
+                                {fletero}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
 
                         <Select value={thirdPartyPaymentStatusFilter} onValueChange={setThirdPartyPaymentStatusFilter}>
                           <SelectTrigger>
@@ -1295,60 +1376,53 @@ export default function L2TripsPage() {
                         // Find the group based on the logic in the component
                         const isBilled = activeTab === "l2_billed"
                         const tripsInGroup = filteredTrips.filter(t => {
-                          const invoiceNumber = isBilled ? t.client_invoice_number : t.third_party_invoice
-                          const clientOrTransport = isBilled ? t.clients?.company : (t.drivers?.transport_company?.name || t.drivers?.name)
-                          const key = `${invoiceNumber || "SIN-COMP"}-${clientOrTransport || "SIN-CLI"}`
-                          return key === groupId
+                          const { groupId: currentGroupId } = buildGroupMetadata(t, isBilled)
+                          return currentGroupId === groupId
                         })
                         if (tripsInGroup.length > 0) {
                           const firstTrip = tripsInGroup[0]
-                          const invoiceNumber = isBilled ? firstTrip.client_invoice_number : firstTrip.third_party_invoice
-                          const clientOrTransport = isBilled ? firstTrip.clients?.company : (firstTrip.drivers?.transport_company?.name || firstTrip.drivers?.name)
-                          const date = isBilled ? (firstTrip.client_invoice_date || firstTrip.bulk_billing_date || firstTrip.invoice_date) : (firstTrip.third_party_payment_date || firstTrip.bulk_settlement_date || firstTrip.invoice_date)
-                          const status = isBilled ? firstTrip.client_payment_status : firstTrip.third_party_payment_status
+                          const groupMetadata = buildGroupMetadata(firstTrip, isBilled)
                           const amount = tripsInGroup.reduce((sum, t) => sum + (Number(isBilled ? t.trip_amount : t.third_party_amount) || 0), 0)
-                          const blockId = isBilled ? firstTrip.bulk_billing_id : firstTrip.bulk_settlement_id
                           
-                          setSelectedGroups([...selectedGroups, {
-                            id: groupId,
-                            invoiceNumber: invoiceNumber || "Sin Comprobante",
-                            date: date || "",
-                            clientOrTransport: clientOrTransport || "Sin Especificar",
-                            amount,
-                            status: status || (isBilled ? "PENDIENTE" : "IMPAGO"),
-                            blockId,
-                            trips: tripsInGroup
-                          }])
+                          setSelectedGroups((previous) => {
+                            const nextGroup = {
+                              id: groupId,
+                              invoiceNumber: groupMetadata.invoiceNumber,
+                              date: groupMetadata.date || "",
+                              clientOrTransport: groupMetadata.clientOrTransport,
+                              amount,
+                              status: groupMetadata.status || (isBilled ? "PENDIENTE" : "IMPAGO"),
+                              blockId: groupMetadata.blockId,
+                              trips: tripsInGroup
+                            }
+
+                            const withoutCurrent = previous.filter((group) => group.id !== groupId)
+                            return [...withoutCurrent, nextGroup]
+                          })
                         }
                       } else {
-                        setSelectedGroups(selectedGroups.filter(g => g.id !== groupId))
+                        setSelectedGroups((previous) => previous.filter((group) => group.id !== groupId))
                       }
                     }}
                     onSelectAllGroups={(checked, allGroupIds) => {
                       if (checked) {
                         // Build all groups
                         const isBilled = activeTab === "l2_billed"
-                        const newGroups: TripGroup[] = []
                         const groupsMap = new Map<string, TripGroup>()
                         
                         filteredTrips.forEach(t => {
-                          const invoiceNumber = isBilled ? t.client_invoice_number : t.third_party_invoice
-                          const clientOrTransport = isBilled ? t.clients?.company : (t.drivers?.transport_company?.name || t.drivers?.name)
-                          const key = `${invoiceNumber || "SIN-COMP"}-${clientOrTransport || "SIN-CLI"}`
+                          const groupMetadata = buildGroupMetadata(t, isBilled)
+                          const key = groupMetadata.groupId
                           
                           if (!groupsMap.has(key)) {
-                            const date = isBilled ? (t.client_invoice_date || t.bulk_billing_date || t.invoice_date) : (t.third_party_payment_date || t.bulk_settlement_date || t.invoice_date)
-                            const status = isBilled ? t.client_payment_status : t.third_party_payment_status
-                            const blockId = isBilled ? t.bulk_billing_id : t.bulk_settlement_id
-                            
                             groupsMap.set(key, {
                               id: key,
-                              invoiceNumber: invoiceNumber || "Sin Comprobante",
-                              date: date || "",
-                              clientOrTransport: clientOrTransport || "Sin Especificar",
+                              invoiceNumber: groupMetadata.invoiceNumber,
+                              date: groupMetadata.date || "",
+                              clientOrTransport: groupMetadata.clientOrTransport,
                               amount: 0,
-                              status: status || (isBilled ? "PENDIENTE" : "IMPAGO"),
-                              blockId,
+                              status: groupMetadata.status || (isBilled ? "PENDIENTE" : "IMPAGO"),
+                              blockId: groupMetadata.blockId,
                               trips: []
                             })
                           }
