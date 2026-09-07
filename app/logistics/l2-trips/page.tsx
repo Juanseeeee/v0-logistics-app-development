@@ -22,6 +22,24 @@ import { generateL2TripsListPDF, generateSingleL2TripPDF, generateGroupedTripsPD
 import { L2Trip, L1Trip, Client, Driver, Product, Location, TripGroup } from "@/types/l2-trip"
 import { GroupedL2TripsTable } from "@/components/grouped-l2-trips-table"
 
+// PostgREST caps every response at 1000 rows, so a single request silently
+// truncates once a table grows past that. Page through until a short page.
+const PAGE_SIZE = 1000
+
+async function fetchAllRows<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildPage(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < PAGE_SIZE) break
+  }
+  return rows
+}
+
 export default function L2TripsPage() {
   const [l2Trips, setL2Trips] = useState<L2Trip[]>([])
   const [l1Trips, setL1Trips] = useState<L1Trip[]>([])
@@ -84,47 +102,52 @@ export default function L2TripsPage() {
       setUserEmail(user?.email || "")
 
       // Load L2 trips (trips already in L2)
-      const { data: l2TripsData, error: l2Error } = await supabase
-        .from("l2_trips")
-        .select(`
-          *,
-          clients(company),
-          products(name),
-          drivers(name),
-          trips(trip_number, date, line)
-        `)
-        .order("created_at", { ascending: false })
-
-      if (l2Error) throw l2Error
+      const l2TripsData = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from("l2_trips")
+          .select(`
+            *,
+            clients(company),
+            products(name),
+            drivers(name),
+            trips(trip_number, date, line)
+          `)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      )
 
       // Load L1 trips that are NOT yet in L2
-      const { data: existingL2TripIds } = await supabase.from("l2_trips").select("trip_id")
+      const existingL2TripIds = await fetchAllRows<{ trip_id: string | null }>((from, to) =>
+        supabase.from("l2_trips").select("trip_id").order("id", { ascending: true }).range(from, to),
+      )
 
-      const l2TripIds = (existingL2TripIds || []).map((t) => t.trip_id).filter(Boolean)
+      const l2TripIds = new Set(existingL2TripIds.map((t) => t.trip_id).filter(Boolean))
 
-      let l1Query = supabase
-        .from("trips")
-        .select(`
-          *,
-          driver:drivers(
-            id,
-            name,
-            cuit,
-            chasis:vehicles!drivers_chasis_id_fkey(id, patent_chasis),
-            semi:vehicles!drivers_semi_id_fkey(id, patent_chasis)
-          )
-        `)
-        .in("line", ["L2", "L1/L2"])
-        .order("date", { ascending: false })
+      const allL2LineTrips = await fetchAllRows<any>((from, to) =>
+        supabase
+          .from("trips")
+          .select(`
+            *,
+            driver:drivers(
+              id,
+              name,
+              cuit,
+              chasis:vehicles!drivers_chasis_id_fkey(id, patent_chasis),
+              semi:vehicles!drivers_semi_id_fkey(id, patent_chasis)
+            )
+          `)
+          .in("line", ["L2", "L1/L2"])
+          .order("date", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      )
 
-      // Only add the NOT IN filter if there are actually L2 trip IDs to exclude
-      if (l2TripIds.length > 0) {
-        l1Query = l1Query.not("id", "in", `(${l2TripIds.join(",")})`)
-      }
-
-      const { data: l1TripsData, error: l1Error } = await l1Query
-
-      if (l1Error) throw l1Error
+      // Exclude trips already loaded into L2 on the client. Sending the exclusion
+      // list as a not.in.(...) URL filter made the request grow with every new
+      // l2_trips row; past ~600 ids the request exceeded the API gateway size limit
+      // and was rejected with a plain-text "400 Bad Request".
+      const l1TripsData = allL2LineTrips.filter((t) => !l2TripIds.has(t.id))
 
       // Load clients
       const { data: clientsData, error: clientsError } = await supabase.from("clients").select("*").order("company")
