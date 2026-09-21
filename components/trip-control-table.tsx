@@ -12,6 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { TripForm } from "@/components/trip-form"
 import { Badge } from "@/components/ui/badge"
 import * as XLSX from "xlsx"
+import {
+  TRIPS_PAGE_SIZE,
+  TRIP_LINES,
+  fetchAllMatchingTrips,
+  hasActiveTripFilters,
+  type DriverOption,
+  type TripFilters,
+} from "@/lib/trips/query"
 
 interface Trip {
   id: string
@@ -149,15 +157,45 @@ const getLocalDateString = (date: Date) => {
 
 export function TripControlTable({
   trips,
+  totalCount,
+  tableLoading,
+  filters,
+  onFiltersChange,
+  onResetFilters,
+  currentPage,
+  onPageChange,
   drivers,
+  searchDrivers,
+  driverOptions,
+  transportCompanyOptions,
+  productOptions,
+  loadingLocationOptions,
+  unloadingLocationOptions,
   clients,
   locations,
   onClientChange,
   onRefresh,
   stats,
 }: {
+  /** The current page of trips, already filtered and paginated by the server. */
   trips: Trip[]
+  /** Total rows matching the filters, across every page. */
+  totalCount: number
+  tableLoading: boolean
+  filters: TripFilters
+  onFiltersChange: (next: Partial<TripFilters>) => void
+  onResetFilters: () => void
+  currentPage: number
+  onPageChange: (page: number) => void
+  /** Active drivers, offered by the edit form. */
   drivers: Driver[]
+  /** Every driver, used to resolve a search term to driver ids exactly as the page does. */
+  searchDrivers: DriverOption[]
+  driverOptions: { id: string; name: string }[]
+  transportCompanyOptions: { id: string; name: string }[]
+  productOptions: string[]
+  loadingLocationOptions: string[]
+  unloadingLocationOptions: string[]
   clients: Client[]
   locations: Location[]
   onClientChange: (clientId: string) => Promise<Product[]>
@@ -183,18 +221,34 @@ export function TripControlTable({
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [expandedParticularities, setExpandedParticularities] = useState<Set<string>>(new Set())
-  const [searchFilter, setSearchFilter] = useState("")
-  const [dateFromFilter, setDateFromFilter] = useState("")
-  const [dateToFilter, setDateToFilter] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [lineFilter, setLineFilter] = useState("all")
-  const [driverFilter, setDriverFilter] = useState("all")
-  const [productFilter, setProductFilter] = useState("all")
-  // Added transportCompanyFilter state
-  const [transportCompanyFilter, setTransportCompanyFilter] = useState("all")
-  const [loadingLocationFilter, setLoadingLocationFilter] = useState("all")
-  const [unloadingLocationFilter, setUnloadingLocationFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
+
+  // Filters and pagination live in the page, which turns them into a server-side
+  // query. Reading them through these aliases keeps the inputs below unchanged.
+  const searchFilter = filters.search
+  const dateFromFilter = filters.dateFrom
+  const dateToFilter = filters.dateTo
+  const statusFilter = filters.status
+  const lineFilter = filters.line
+  const driverFilter = filters.driver
+  const productFilter = filters.product
+  const transportCompanyFilter = filters.transportCompany
+  const loadingLocationFilter = filters.loadingLocation
+  const unloadingLocationFilter = filters.unloadingLocation
+
+  const setSearchFilter = (value: string) => onFiltersChange({ search: value })
+  const setDateFromFilter = (value: string) => onFiltersChange({ dateFrom: value })
+  const setDateToFilter = (value: string) => onFiltersChange({ dateTo: value })
+  const setStatusFilter = (value: string) => onFiltersChange({ status: value })
+  const setLineFilter = (value: string) => onFiltersChange({ line: value })
+  const setDriverFilter = (value: string) => onFiltersChange({ driver: value })
+  const setProductFilter = (value: string) => onFiltersChange({ product: value })
+  const setTransportCompanyFilter = (value: string) => onFiltersChange({ transportCompany: value })
+  const setLoadingLocationFilter = (value: string) => onFiltersChange({ loadingLocation: value })
+  const setUnloadingLocationFilter = (value: string) => onFiltersChange({ unloadingLocation: value })
+  // The pagination controls call this both with a number and with an updater.
+  const setCurrentPage = (value: number | ((prev: number) => number)) =>
+    onPageChange(typeof value === "function" ? value(currentPage) : value)
 
   const handleEdit = (trip: Trip) => {
     setEditingTrip(trip)
@@ -444,64 +498,39 @@ export function TripControlTable({
     })
   }
 
-  const uniqueLines = Array.from(new Set(trips.map((t) => t.line))).filter(Boolean).sort()
-  const uniqueDrivers = Array.from(new Set(trips.map((t) => t.driver?.name))).filter(Boolean).sort()
-  const uniqueProducts = Array.from(new Set(trips.map((t) => t.product))).filter(Boolean).sort()
+  // Filter options describe the whole table, not the page on screen, so they come
+  // from the page as distinct values scanned across every trip.
+  const uniqueLines = TRIP_LINES
   const uniqueClients = Array.from(new Set(clients.map((c) => c.company))).filter(Boolean).sort()
-  const uniqueTransportCompanies = Array.from(
-    new Set(
-      trips.map((t) => t.driver?.chasis?.transport_companies?.name).filter((name): name is string => name != null && name !== ""),
-    ),
-  ).sort()
-  // Get unique locations from actual trips to show only used locations
-  const uniqueLoadingLocations = Array.from(new Set(trips.map((t) => t.loading_location))).filter(Boolean).sort()
-  const uniqueUnloadingLocations = Array.from(new Set(trips.map((t) => t.unloading_location))).filter(Boolean).sort()
-  const uniqueLocations = Array.from(new Set([...uniqueLoadingLocations, ...uniqueUnloadingLocations])).filter(Boolean).sort()
+  const uniqueProducts = productOptions
+  const uniqueLoadingLocations = loadingLocationOptions
+  const uniqueUnloadingLocations = unloadingLocationOptions
+  const uniqueLocations = Array.from(new Set([...uniqueLoadingLocations, ...uniqueUnloadingLocations])).sort()
 
-  const filteredTrips = trips.filter((trip) => {
-    const matchesSearch =
-      searchFilter === "" ||
-      trip.trip_number.toString().includes(searchFilter) ||
-      trip.client_name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      trip.driver.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      (trip.driver.chasis?.patent_chasis || "").toLowerCase().includes(searchFilter.toLowerCase()) ||
-      (trip.driver.semi?.patent_chasis || "").toLowerCase().includes(searchFilter.toLowerCase())
+  // The server already applied the filters and returned just this page, so the
+  // rows arrive ready to render. Filtering here as well would drop rows from the
+  // page and leave the count disagreeing with what is on screen.
+  const paginatedTrips = trips
+  const totalPages = Math.max(1, Math.ceil(totalCount / TRIPS_PAGE_SIZE))
+  const startIndex = (currentPage - 1) * TRIPS_PAGE_SIZE
+  const endIndex = startIndex + paginatedTrips.length
 
-    const tripDate = trip.date
-    const matchesDateFrom = dateFromFilter === "" || tripDate >= dateFromFilter
-    const matchesDateTo = dateToFilter === "" || tripDate <= dateToFilter
-    const matchesDate = matchesDateFrom && matchesDateTo
+  const exportToExcel = async () => {
+    if (isExporting) return
+    setIsExporting(true)
 
-    const matchesStatus = statusFilter === "all" || trip.status === statusFilter
-    const matchesLine = lineFilter === "all" || trip.line === lineFilter
-    const matchesDriver = driverFilter === "all" || trip.driver.name === driverFilter
-    const matchesProduct = productFilter === "all" || trip.product === productFilter
-    const matchesTransportCompany =
-      transportCompanyFilter === "all" || trip.driver.chasis?.transport_companies?.name === transportCompanyFilter
-    const matchesLoadingLocation =
-      loadingLocationFilter === "all" || trip.loading_location === loadingLocationFilter
-    const matchesUnloadingLocation =
-      unloadingLocationFilter === "all" || trip.unloading_location === unloadingLocationFilter
+    let exportTrips: Trip[]
+    try {
+      // Only one page is in memory, so the export re-runs the same filters
+      // server-side to cover every matching trip.
+      exportTrips = (await fetchAllMatchingTrips(createClient(), filters, searchDrivers)) as Trip[]
+    } catch (error) {
+      console.error("Error exporting trips:", error)
+      alert("No se pudieron exportar los viajes. Intentá nuevamente.")
+      setIsExporting(false)
+      return
+    }
 
-    return (
-      matchesSearch &&
-      matchesDate &&
-      matchesStatus &&
-      matchesLine &&
-      matchesDriver &&
-      matchesProduct &&
-      matchesTransportCompany &&
-      matchesLoadingLocation &&
-      matchesUnloadingLocation
-    )
-  })
-
-  const totalPages = Math.ceil(filteredTrips.length / 50)
-  const startIndex = (currentPage - 1) * 50
-  const endIndex = startIndex + 50
-  const paginatedTrips = filteredTrips.slice(startIndex, endIndex)
-
-  const exportToExcel = () => {
     const headers = [
       "N° Viaje",
       "Fecha",
@@ -519,7 +548,7 @@ export function TripControlTable({
       "Notas",
     ]
 
-    const rows = filteredTrips.map((trip) => [
+    const rows = exportTrips.map((trip) => [
       trip.trip_number,
       formatLocalDate(trip.date),
       getStatusLabel(trip.status),
@@ -583,7 +612,7 @@ export function TripControlTable({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportToExcel} disabled={filteredTrips.length === 0}>
+          <Button variant="outline" onClick={exportToExcel} disabled={totalCount === 0 || isExporting}>
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -694,9 +723,9 @@ export function TripControlTable({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {uniqueDrivers.map((driver) => (
-                    <SelectItem key={driver} value={driver}>
-                      {driver}
+                  {driverOptions.map((driver) => (
+                    <SelectItem key={driver.id} value={driver.id}>
+                      {driver.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -726,9 +755,9 @@ export function TripControlTable({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {uniqueTransportCompanies.map((company) => (
-                    <SelectItem key={company} value={company}>
-                      {company}
+                  {transportCompanyOptions.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -768,37 +797,13 @@ export function TripControlTable({
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4">
-            <Badge variant="secondary">{filteredTrips.length} viajes encontrados</Badge>
+            <Badge variant="secondary">{totalCount} viajes encontrados</Badge>
+            {tableLoading && <span className="text-sm text-muted-foreground">Buscando...</span>}
             <Badge variant="outline">
-              Mostrando {startIndex + 1}-{Math.min(endIndex, filteredTrips.length)} de {filteredTrips.length}
+              Mostrando {totalCount === 0 ? 0 : startIndex + 1}-{endIndex} de {totalCount}
             </Badge>
-            {(searchFilter ||
-              dateFromFilter ||
-              dateToFilter ||
-              statusFilter !== "all" ||
-              lineFilter !== "all" ||
-              driverFilter !== "all" ||
-              productFilter !== "all" ||
-              transportCompanyFilter !== "all" ||
-              loadingLocationFilter !== "all" ||
-              unloadingLocationFilter !== "all") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchFilter("")
-                  setDateFromFilter("")
-                  setDateToFilter("")
-                  setStatusFilter("all")
-                  setLineFilter("all")
-                  setDriverFilter("all")
-                  setProductFilter("all")
-                  setTransportCompanyFilter("all")
-                  setLoadingLocationFilter("all")
-                  setUnloadingLocationFilter("all")
-                  setCurrentPage(1)
-                }}
-              >
+            {hasActiveTripFilters(filters) && (
+              <Button variant="ghost" size="sm" onClick={onResetFilters}>
                 Limpiar filtros
               </Button>
             )}
